@@ -1,8 +1,8 @@
 {
-    "key": "光速",
-    "name": "光速",
+    "key": "xhm",
+    "name": "X",
     "type": 3,
-    "api": "爬虫所在位置/光速.py",
+    "api": "https://raw.githubusercontent.com/ptus815/PQ/refs/heads/main/plugin/adult/Xhm.py",
     "searchable": 1,
     "quickSearch": 1,
     "filterable": 1
