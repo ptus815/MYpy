@@ -5,6 +5,6 @@
   "type": 3,
   "api": "https://raw.githubusercontent.com/ptus815/PQ/main/plugin/adult/Xhm.py",
   "searchable": 1,
-  "quickSearch": 1,
-  "filterable": 1
+  "quickSearch": 0,
+  "filterable": 0
 }
