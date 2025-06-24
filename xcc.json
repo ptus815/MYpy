@@ -1,11 +1,15 @@
 {
-    "key": "py_Xhm",
-    "name": "🔥Xhm｜py",
-    "type": 3,
-    "api": "https://raw.githubusercontent.com/meinvtuzai/PyramidStore-18/main/plugin/adult/Xhm.py",
-    "searchable": 1,
-    "quickSearch": 1,
-    "changeable": 1,
-    "filterable": 1,
-    "timeout": 60
+  "sites": [
+    {
+      "key": "py_Xhm",
+      "name": "🔥Xhm｜py",
+      "type": 3,
+      "api": "https://raw.githubusercontent.com/meinvtuzai/PyramidStore-18/main/plugin/adult/Xhm.py",
+      "searchable": 1,
+      "quickSearch": 1,
+      "changeable": 1,
+      "filterable": 1,
+      "timeout": 60
+    }
+  ]
 }
