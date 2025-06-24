@@ -1,4 +1,4 @@
- coding=utf-8
+# coding=utf-8
 # !/usr/bin/python
 # by嗷呜
 import json
@@ -8,7 +8,7 @@ from pyquery import PyQuery as pq
 from requests import Session
 sys.path.append('..')
 from base.spider import Spider
-import socket
+
 
 class Spider(Spider):
 
@@ -17,32 +17,8 @@ class Spider(Spider):
         self.headers['referer'] = f'{self.host}/'
         self.session = Session()
         self.session.headers.update(self.headers)
-        # 设置代理
-        self.proxies = {
-            'http': 'http://127.0.0.1:7890',
-            'https': 'http://127.0.0.1:7890'
-        }
-        # if self.is_port_open('127.0.0.1', 7891):
-        #     self.proxies = {
-        #         'http': 'http://127.0.0.1:7891',
-        #         'https': 'http://127.0.0.1:7891'
-        #     }
-        
-        self.session.proxies.update(self.proxies)
         pass
 
-    def is_port_open(self, host, port):
-        """使用 socket 检查指定主机和端口是否开放"""
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(1)  # 设置 1 秒超时
-        try:
-            result = sock.connect_ex((host, port))
-            return result == 0  # 返回 0 表示端口开放
-        except Exception:
-            return False
-        finally:
-            sock.close()
-        
     def getName(self):
         pass
 
@@ -94,7 +70,7 @@ class Spider(Spider):
                 'type_name': k,
                 'type_id': cateManual[k]
             })
-            if k != '4K': filters[cateManual[k]] = [{'key': 'type', 'name': '类型', 'value': [{'n': '4K', 'v': '/4k'}]}]
+            if k !='4K':filters[cateManual[k]]=[{'key':'type','name':'类型','value':[{'n':'4K','v':'/4k'}]}]
         result['class'] = classes
         result['filters'] = filters
         return result
@@ -188,25 +164,20 @@ class Spider(Spider):
             plist = []
             d = djs['xplayerSettings']['sources']
             f = d.get('standard')
-            def custom_sort_key(url):
-                quality = url.split('$')[0]
-                number = ''.join(filter(str.isdigit, quality))
-                number = int(number) if number else 0
-                return -number, quality
-                
-            if f:
-                for key, value in f.items():
-                    if isinstance(value, list):
-                        for info in value:
-                            id = self.e64(f'{0}@@@@{info.get("url") or info.get("fallback")}')
-                            plist.append(f"{info.get('label') or info.get('quality')}${id}")
-            plist.sort(key=custom_sort_key)
+            ah=[]
             if d.get('hls'):
                 for format_type, info in d['hls'].items():
                     if url := info.get('url'):
                         encoded = self.e64(f'{0}@@@@{url}')
                         plist.append(f"{format_type}${encoded}")
-                        
+            if f:
+                for key, value in f.items():
+                    if isinstance(value, list):
+                        ah.extend(value)
+            if len(ah):
+                for info in ah:
+                    id = self.e64(f'{0}@@@@{info.get("url") or info.get("fallback")}')
+                    plist.append(f"{info.get('label') or info.get('quality')}${id}")
         except Exception as e:
             plist = [f"{vn}${self.e64(f'{1}@@@@{ids[0]}')}"]
             print(f"获取视频信息失败: {str(e)}")
@@ -242,11 +213,11 @@ class Spider(Spider):
 
     def gethost(self):
         try:
-            response = self.fetch('https://xhamster.com', headers=self.headers, proxies=self.proxies, allow_redirects=False)
+            response = self.fetch('http://127.0.0.1:10079/p/0/127.0.0.1:10172/https://xhamster.com', headers=self.headers, allow_redirects=False)
             return response.headers['Location']
         except Exception as e:
             print(f"获取主页失败: {str(e)}")
-            return "https://zn.xhamster.com"
+            return "http://127.0.0.1:10079/p/0/127.0.0.1:10172/https://zn.xhamster.com"
 
     def e64(self, text):
         try:
