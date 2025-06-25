@@ -119,6 +119,8 @@ class Spider(Spider):
 
         # 尝试从video标签中直接获取m3u8链接
         video_src = data('video').attr('src')
+        if not video_src:
+            video_src = data('video > source').attr('src')
         if video_src and ('.m3u8' in video_src or '.mp4' in video_src):
             encoded = self.e64(f'{0}@@@@{video_src}')
             plist.append(f"自动选择${encoded}")
