@@ -54,7 +54,7 @@ class Spider(Spider):
         'priority': 'u=0, i'
     }
 
-    def homeContent(self, filter):
+    def homeContent(self):
         result = {}
         cateManual = {
             "当前最热": "/视频/当前最热",
@@ -77,6 +77,7 @@ class Spider(Spider):
                 'type_id': cateManual[k]
             })
         result['class'] = classes
+        result['list'] = self.homeVideoContent()['list']
         return result
 
     def categoryContent(self, tid, pg, filter, extend):
@@ -99,7 +100,7 @@ class Spider(Spider):
             return result
 
         data = self.getpq(url)
-        vdata = self.getlist(data(".video-item"))
+        vdata = self.getlist(data("main > generic:nth-child(2) > list > listitem"))
 
         result['list'] = vdata
         return result
@@ -144,7 +145,7 @@ class Spider(Spider):
 
     def searchContent(self, key, quick, pg="1"):
         data = self.getpq(f'/视频/search/{quote(key)}/{pg}')
-        return {'list': self.getlist(data(".video-item")), 'page': pg}
+        return {'list': self.getlist(data("main > generic:nth-child(2) > list > listitem")), 'page': pg}
 
     def playerContent(self, flag, id, vipFlags):
         headers = {
@@ -198,11 +199,16 @@ class Spider(Spider):
     def getlist(self, data):
         vlist = []
         for i in data.items():
+            vod_id = i('link').eq(1).attr('href') if i('link').length > 1 else i('link').attr('href')
+            vod_name = i('link').eq(1).text() if i('link').length > 1 else i('link').text()
+            vod_pic = i('img').attr('src')
+            vod_remarks = i('link').eq(0).find('generic:last-child').text() if i('link').length > 0 else '' # 尝试从第一个链接的最后一个generic子元素中获取时长
+
             vlist.append({
-                'vod_id': i('a').attr('href'),
-                'vod_name': i('.video-title').text(),
-                'vod_pic': i('img').attr('src'),
-                'vod_remarks': i('.duration').text()
+                'vod_id': vod_id,
+                'vod_name': vod_name,
+                'vod_pic': vod_pic,
+                'vod_remarks': vod_remarks
             })
         return vlist
 
@@ -214,6 +220,10 @@ class Spider(Spider):
         except Exception as e:
             print(f"{str(e)}")
             return pq(response.encode('utf-8'))
+
+    def homeVideoContent(self):
+        data = self.getpq('/')
+        return {'list': self.getlist(data("main > generic:nth-child(2) > list > listitem"))}
 
     # def getjsdata(self, data):
     #     vhtml = data("script[id='initials-script']").text()
