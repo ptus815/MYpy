@@ -100,7 +100,7 @@ class Spider(Spider):
             return result
 
         data = self.getpq(url)
-        vdata = self.getlist(data("main > generic:nth-child(2) > list > listitem"))
+        vdata = self.getlist(data("main > generic:nth-child(3) > list > listitem"))
 
         result['list'] = vdata
         return result
@@ -145,7 +145,7 @@ class Spider(Spider):
 
     def searchContent(self, key, quick, pg="1"):
         data = self.getpq(f'/视频/search/{quote(key)}/{pg}')
-        return {'list': self.getlist(data("main > generic:nth-child(2) > list > listitem")), 'page': pg}
+        return {'list': self.getlist(data("main > generic:nth-child(3) > list > listitem")), 'page': pg}
 
     def playerContent(self, flag, id, vipFlags):
         headers = {
@@ -199,10 +199,10 @@ class Spider(Spider):
     def getlist(self, data):
         vlist = []
         for i in data.items():
-            vod_id = i('link').eq(1).attr('href') if i('link').length > 1 else i('link').attr('href')
-            vod_name = i('link').eq(1).text() if i('link').length > 1 else i('link').text()
-            vod_pic = i('img').attr('src')
-            vod_remarks = i('link').eq(0).find('generic:last-child').text() if i('link').length > 0 else '' # 尝试从第一个链接的最后一个generic子元素中获取时长
+            vod_id = i('link').eq(0).attr('href')
+            vod_name = i('link').eq(1).text()
+            vod_pic = i('link').eq(0).find('img').attr('src')
+            vod_remarks = i('link').eq(0).find('generic:last-child').text()
 
             vlist.append({
                 'vod_id': vod_id,
@@ -223,7 +223,7 @@ class Spider(Spider):
 
     def homeVideoContent(self):
         data = self.getpq('/')
-        return {'list': self.getlist(data("main > generic:nth-child(2) > list > listitem"))}
+        return {'list': self.getlist(data("main > generic:nth-child(3) > list > listitem"))}
 
     # def getjsdata(self, data):
     #     vhtml = data("script[id='initials-script']").text()
