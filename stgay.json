@@ -1,0 +1,15 @@
+{
+  "sites": [
+    {
+      "key": "py_Stgay",
+      "name": "🏳️‍🌈Stgay｜py",
+      "type": 3,
+      "api": "https://raw.githubusercontent.com/ptus815/PQ/refs/heads/main/plugin/adult/stgay.py",
+      "searchable": 1,
+      "quickSearch": 1,
+      "changeable": 1,
+      "filterable": 1,
+      "timeout": 60
+    }
+  ]
+} 
