@@ -3,6 +3,8 @@
 import json
 import sys
 import re
+import time
+import random
 from base64 import b64decode, b64encode
 from pyquery import PyQuery as pq
 from requests import Session
@@ -36,20 +38,14 @@ class Spider(Spider):
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
         'sec-ch-ua': '"Not(A:Brand";v="99", "Google Chrome";v="133", "Chromium";v="133"',
         'sec-ch-ua-mobile': '?0',
-        'sec-ch-ua-full-version': '"133.0.6943.98"',
-        'sec-ch-ua-arch': '"x86"',
         'sec-ch-ua-platform': '"Windows"',
-        'sec-ch-ua-platform-version': '"19.0.0"',
-        'sec-ch-ua-model': '""',
-        'sec-ch-ua-full-version-list': '"Not(A:Brand";v="99.0.0.0", "Google Chrome";v="133.0.6943.98", "Chromium";v="133.0.6943.98"',
         'dnt': '1',
         'upgrade-insecure-requests': '1',
         'sec-fetch-site': 'none',
         'sec-fetch-mode': 'navigate',
         'sec-fetch-user': '?1',
         'sec-fetch-dest': 'document',
-        'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
-        'priority': 'u=0, i'
+        'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8'
     }
 
     def homeContent(self, filter):
@@ -87,7 +83,7 @@ class Spider(Spider):
 
     def homeVideoContent(self):
         data = self.getpq("/视频/正在播放")
-        return {'list': self.getlist(data(".video-list-area .video-list-item"))}
+        return {'list': self.getlist(data)}
 
     def categoryContent(self, tid, pg, filter, extend):
         result = {}
@@ -98,7 +94,7 @@ class Spider(Spider):
         
         url = f'{tid}' if pg == '1' else f'{tid}/{pg}'
         data = self.getpq(url)
-        vlist = self.getlist(data(".video-list-area .video-list-item"))
+        vlist = self.getlist(data)
         result['list'] = vlist
         return result
 
@@ -109,6 +105,8 @@ class Spider(Spider):
         # 获取视频标题
         vod['vod_id'] = ids[0]
         vod['vod_name'] = data('h1.video-detail-title').text().strip()
+        if not vod['vod_name']:
+            vod['vod_name'] = data('h1').text().strip()
         
         # 获取视频封面
         vod_pic = ""
@@ -118,14 +116,27 @@ class Spider(Spider):
             if video_img and not video_img.endswith('poster_loading.png'):
                 vod_pic = video_img
             else:
-                # 尝试从推荐视频中找到当前视频的封面
-                video_id = ids[0].split('/')[-1]
-                for item in data('.recommended-videos .video-list-item').items():
-                    if video_id in item('a').attr('href'):
-                        vod_pic = item('img').attr('src')
-                        break
+                # 尝试从页面中找到当前视频的封面
+                for item in data('.video-list-item').items():
+                    if ids[0].split('/')[-1] in item('a').attr('href'):
+                        img_src = item('img').attr('src') or item('img').attr('data-src')
+                        if img_src:
+                            vod_pic = img_src
+                            break
         except:
             pass
+        
+        # 如果仍然没有找到封面，尝试从页面其他位置获取
+        if not vod_pic:
+            try:
+                # 尝试从页面中的其他图片元素获取
+                for img in data('img').items():
+                    if not img.attr('src').endswith('poster_loading.png') and not img.attr('src').endswith('.svg'):
+                        if not img.attr('src').startswith('data:'):
+                            vod_pic = img.attr('src')
+                            break
+            except:
+                pass
         
         vod['vod_pic'] = vod_pic
         
@@ -133,10 +144,23 @@ class Spider(Spider):
         tags = []
         for tag in data('.video-detail-tags .tag-item').items():
             tags.append(tag.text().strip())
+        
+        if not tags:
+            for tag in data('.tag-item').items():
+                tags.append(tag.text().strip())
+                
+        if not tags:
+            for tag in data('a[href*="search"]').items():
+                tag_text = tag.text().strip()
+                if tag_text and len(tag_text) < 10:
+                    tags.append(tag_text)
+                    
         vod['vod_remarks'] = ','.join(tags) if tags else "无标签"
         
         # 获取视频简介
         vod['vod_content'] = data('h2.video-detail-desc').text().strip()
+        if not vod['vod_content']:
+            vod['vod_content'] = data('h2').text().strip()
         
         # 播放列表
         play_url = None
@@ -153,6 +177,20 @@ class Spider(Spider):
             if match:
                 play_url = match.group(1)
         
+        # 方法3：尝试从m3u8链接提取
+        if not play_url:
+            match = re.search(r'(https?://[^"\']+\.m3u8[^"\'\s]*)', html_text)
+            if match:
+                play_url = match.group(1)
+        
+        # 方法4：尝试从iframe中提取
+        if not play_url:
+            iframe = data('iframe')
+            if iframe:
+                iframe_src = iframe.attr('src')
+                if iframe_src:
+                    play_url = iframe_src
+        
         if play_url:
             vod['vod_play_from'] = 'Stgay'
             vod['vod_play_url'] = f"{vod['vod_name']}${self.e64(f'{0}@@@@{play_url}')}"
@@ -166,7 +204,7 @@ class Spider(Spider):
     def searchContent(self, key, quick, pg="1"):
         url = f'/视频/search/{key}' if pg == '1' else f'/视频/search/{key}/{pg}'
         data = self.getpq(url)
-        return {'list': self.getlist(data(".video-list-area .video-list-item")), 'page': pg, 'pagecount': 9999, 'limit': 90, 'total': 999999}
+        return {'list': self.getlist(data), 'page': pg, 'pagecount': 9999, 'limit': 90, 'total': 999999}
 
     def playerContent(self, flag, id, vipFlags):
         headers = {
@@ -198,6 +236,11 @@ class Spider(Spider):
             
             # 尝试从页面JS中提取真实视频URL
             match = re.search(r'url:\s*[\'"]([^\'"]+)[\'"]', html_text)
+            if match:
+                return {'parse': 0, 'url': match.group(1), 'header': headers}
+            
+            # 尝试从m3u8链接提取
+            match = re.search(r'(https?://[^"\']+\.m3u8[^"\'\s]*)', html_text)
             if match:
                 return {'parse': 0, 'url': match.group(1), 'header': headers}
             
@@ -246,54 +289,152 @@ class Spider(Spider):
             print(f"Base64解码错误: {str(e)}")
             return ""
 
-    def getlist(self, items):
+    def getlist(self, data):
         vlist = []
-        for i in items.items():
-            vod_id = i('a').attr('href')
-            if not vod_id:
-                continue
-                
-            # 确保vod_id是相对路径
-            if vod_id.startswith('http'):
-                if vod_id.startswith(self.host):
-                    vod_id = vod_id[len(self.host):]
-                else:
-                    continue  # 跳过外部链接
+        # 查找所有视频列表项
+        for item in data('.video-list-item').items():
+            try:
+                # 获取视频链接
+                a_tag = item('a').eq(0)
+                vod_id = a_tag.attr('href')
+                if not vod_id:
+                    continue
                     
-            vod_name = i('.video-title').text().strip()
-            if not vod_name:
+                # 确保vod_id是相对路径
+                if vod_id.startswith('http'):
+                    if vod_id.startswith(self.host):
+                        vod_id = vod_id[len(self.host):]
+                    else:
+                        continue  # 跳过外部链接
+                        
+                # 获取视频标题
+                vod_name = item('.video-title').text().strip()
+                if not vod_name:
+                    # 尝试从其他元素获取标题
+                    vod_name = a_tag.text().strip()
+                    if not vod_name:
+                        # 尝试从图片alt属性获取标题
+                        vod_name = item('img').attr('alt')
+                
+                if not vod_name:
+                    continue
+                    
+                # 获取视频封面
+                vod_pic = item('img').attr('src')
+                if not vod_pic or vod_pic.endswith('poster_loading.png'):
+                    vod_pic = item('img').attr('data-src')
+                    
+                if not vod_pic:
+                    # 尝试从其他属性获取封面
+                    vod_pic = item('img').attr('data-original')
+                    
+                # 获取视频时长
+                vod_remarks = item('.duration').text().strip() if item('.duration') else ""
+                if not vod_remarks:
+                    # 尝试从其他元素获取时长
+                    for duration_el in item('*').items():
+                        if re.match(r'^\d+:\d+$', duration_el.text().strip()):
+                            vod_remarks = duration_el.text().strip()
+                            break
+                
+                # 观看次数
+                views = item('.video-stats .views').text().strip() if item('.video-stats .views') else ""
+                
+                # 添加视频信息
+                vlist.append({
+                    'vod_id': vod_id,
+                    'vod_name': vod_name,
+                    'vod_pic': vod_pic,
+                    'vod_remarks': vod_remarks,
+                    'vod_year': views,
+                    'style': {'ratio': 1.33, 'type': 'rect'}
+                })
+            except Exception as e:
+                print(f"处理视频项时出错: {str(e)}")
                 continue
                 
-            # 获取视频封面
-            vod_pic = i('img').attr('src')
-            if not vod_pic or vod_pic.endswith('poster_loading.png'):
-                vod_pic = i('img').attr('data-src')
+        # 如果没有找到视频列表，尝试其他选择器
+        if len(vlist) == 0:
+            try:
+                # 尝试查找所有包含视频信息的元素
+                for item in data('a[href*="/视频/"]').items():
+                    try:
+                        # 跳过导航链接
+                        if "正在播放" in item.text() or "当前最热" in item.text() or "最近更新" in item.text():
+                            continue
+                            
+                        vod_id = item.attr('href')
+                        if not vod_id or not "/视频/" in vod_id:
+                            continue
+                            
+                        # 确保vod_id是相对路径
+                        if vod_id.startswith('http'):
+                            if vod_id.startswith(self.host):
+                                vod_id = vod_id[len(self.host):]
+                            else:
+                                continue  # 跳过外部链接
+                                
+                        # 获取视频标题和时长
+                        vod_name = ""
+                        vod_remarks = ""
+                        
+                        # 尝试从链接文本中提取标题和时长
+                        link_text = item.text().strip()
+                        if link_text:
+                            # 检查是否包含时长格式 (MM:SS)
+                            duration_match = re.search(r'(\d+:\d+)$', link_text)
+                            if duration_match:
+                                vod_remarks = duration_match.group(1)
+                                vod_name = link_text[:-(len(vod_remarks))].strip()
+                            else:
+                                vod_name = link_text
+                                
+                        if not vod_name:
+                            continue
+                            
+                        # 获取视频封面
+                        vod_pic = ""
+                        img = item.find('img')
+                        if img:
+                            vod_pic = img.attr('src') or img.attr('data-src') or img.attr('data-original')
+                            
+                        # 添加视频信息
+                        vlist.append({
+                            'vod_id': vod_id,
+                            'vod_name': vod_name,
+                            'vod_pic': vod_pic,
+                            'vod_remarks': vod_remarks,
+                            'style': {'ratio': 1.33, 'type': 'rect'}
+                        })
+                    except Exception as e:
+                        print(f"处理备选视频项时出错: {str(e)}")
+                        continue
+            except Exception as e:
+                print(f"备选方法处理视频列表时出错: {str(e)}")
                 
-            # 获取视频时长
-            vod_remarks = i('.duration').text().strip() if i('.duration') else ""
-            
-            # 观看次数
-            views = i('.video-stats .views').text().strip() if i('.video-stats .views') else ""
-            
-            # 添加视频信息
-            vlist.append({
-                'vod_id': vod_id,
-                'vod_name': vod_name,
-                'vod_pic': vod_pic,
-                'vod_remarks': vod_remarks,
-                'vod_year': views,
-                'style': {'ratio': 1.33, 'type': 'rect'}
-            })
         return vlist
 
     def getpq(self, path=''):
         h = '' if path.startswith('http') else self.host
         url = f'{h}{path}'
         try:
-            response = self.session.get(url, timeout=10)
-            response.raise_for_status()  # 检查响应状态
-            response_text = response.text
-            return pq(response_text)
+            # 添加随机延迟，避免请求过快
+            time.sleep(random.uniform(0.5, 1.5))
+            
+            # 设置超时和重试
+            max_retries = 3
+            for retry in range(max_retries):
+                try:
+                    response = self.session.get(url, timeout=15)
+                    response.raise_for_status()  # 检查响应状态
+                    response_text = response.text
+                    return pq(response_text)
+                except Exception as e:
+                    if retry < max_retries - 1:
+                        time.sleep(random.uniform(1, 3))
+                        continue
+                    else:
+                        raise e
         except Exception as e:
             print(f"获取页面失败 {url}: {str(e)}")
-            return pq("<html></html>") 
+            return pq("<html></html>")
