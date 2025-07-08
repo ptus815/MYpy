@@ -1,0 +1,14 @@
+{
+    "sites": [
+        {
+            "key": "fmoviesto",
+            "name": "FMovies",
+            "type": 3,
+            "api": "https://raw.githubusercontent.com/ptus815/PQ/refs/heads/main/plugin/html/fmoviesto.py",
+            "searchable": 1,
+            "quickSearch": 1,
+            "filterable": 1,
+            "changeable": 1
+        }
+    ]
+}
