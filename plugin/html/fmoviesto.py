@@ -80,7 +80,7 @@ class Spider(Spider):
 
     def detailContent(self, ids):
         try:
-            # The 'ids' is now a JSON string containing all necessary info
+            # The 'ids' is a JSON string containing basic info
             vod_info = json.loads(ids[0])
             url = self.site_url + vod_info['vod_id']
             
@@ -89,61 +89,65 @@ class Spider(Spider):
 
             play_from = []
             play_url = []
-            
-            # The server list is loaded via AJAX
-            movie_id = doc('#watch-iframe').attr('data-id') or re.search(r'get_movie_info\("([^"]+)"\)', html).group(1)
-            
-            # Determine if it's a movie or tv show from the vod_id
-            if 'movie' in vod_info['vod_id']:
-                ajax_url = f"{self.site_url}/ajax/v2/movie/servers/{movie_id}"
-                servers_html = self.fetch(ajax_url, headers=self.headers).json().get('html', '')
-                servers_doc = pq(servers_html)
-                
-                for link in servers_doc('.server-item').items():
-                    server_name = link.find('a').text().strip()
-                    s_id = link.attr('data-id')
-                    if server_name and s_id:
-                        play_from.append(server_name)
-                        play_url.append(f"播放$/movie/{movie_id}/{s_id}")
 
-            elif 'tv' in vod_info['vod_id']:
-                seasons = doc('.season-select .ss-item')
-                all_server_episodes = {}
-                for season in seasons.items():
+            # For Movies
+            if '/movie/' in vod_info['vod_id']:
+                server_items = doc('.server-list .server-item a')
+                for item in server_items.items():
+                    name = item.text().replace('Server', '').strip()
+                    href = item.attr('href')
+                    if name and href:
+                        play_from.append(name)
+                        # The id for playerContent will be the direct watch link
+                        play_url.append(f"播放${href}")
+                
+                if play_from:
+                    vod_info['vod_play_from'] = "$$$".join(play_from)
+                    vod_info['vod_play_url'] = "$$$".join(play_url)
+
+            # For TV Shows
+            elif '/tv/' in vod_info['vod_id']:
+                seasons_doc = doc('.ss-item')
+                all_eps_by_server = {}
+
+                for season in seasons_doc.items():
                     s_id = season.attr('data-id')
                     s_name = season.text().strip()
-                    
+
                     eps_url = f"{self.site_url}/ajax/v2/tv/episodes/{s_id}"
                     eps_html = self.fetch(eps_url, headers=self.headers).text
                     eps_doc = pq(eps_html)
 
                     for ep in eps_doc('.eps-item').items():
-                        ep_id = ep.attr('data-id')
-                        ep_name = ep.find('.episode-name').text().strip()
-                        
-                        servers_url = f"{self.site_url}/ajax/v2/episode/servers/{ep_id}"
-                        servers_html = self.fetch(servers_url, headers=self.headers).json().get('html', '')
-                        servers_doc = pq(servers_html)
-                        
-                        for server_link in servers_doc('.server-item').items():
-                            server_name = server_link.text().strip()
-                            s_link_id = server_link.attr('data-id')
-                            if server_name and s_link_id:
-                                if server_name not in all_server_episodes:
-                                    all_server_episodes[server_name] = []
-                                all_server_episodes[server_name].append(f"{s_name} {ep_name}$/tv/{movie_id}/{s_link_id}/{ep_id}")
-                
-                for server_name, episodes in all_server_episodes.items():
-                    play_from.append(server_name)
-                    play_url.append("#".join(episodes))
+                        ep_name = ep.find('.episode-name').text()
+                        ep_href = ep.find('a').attr('href')
+                        if ep_name and ep_href:
+                            # We need to fetch the watch page to find servers for each episode
+                            watch_page_html = self.fetch(self.site_url + ep_href, headers=self.headers).text
+                            watch_doc = pq(watch_page_html)
+                            
+                            for server_item in watch_doc('.server-item').items():
+                                server_name = server_item.text().replace('Server', '').strip()
+                                server_href = server_item.find('a').attr('href')
+                                if server_name and server_href:
+                                    if server_name not in all_eps_by_server:
+                                        all_eps_by_server[server_name] = []
+                                    # Format: "Episode Name$URL"
+                                    all_eps_by_server[server_name].append(f"{s_name} - {ep_name}${server_href}")
 
-            if play_from and play_url:
-                vod_info['vod_play_from'] = "$$$".join(play_from)
-                vod_info['vod_play_url'] = "$$$".join(play_url)
+                if all_eps_by_server:
+                    for server_name, episodes in all_eps_by_server.items():
+                        play_from.append(server_name)
+                        play_url.append("#".join(episodes))
+                
+                    vod_info['vod_play_from'] = '$$$'.join(play_from)
+                    vod_info['vod_play_url'] = '$$$'.join(play_url)
 
             return {'list': [vod_info]}
         except Exception as e:
             print(f"Error in detailContent: {e}")
+            # It's good practice to log the full traceback for debugging
+            import traceback
             traceback.print_exc()
             return {'list': []}
 
@@ -185,48 +189,58 @@ class Spider(Spider):
 
     def playerContent(self, flag, id, vipFlags):
         try:
-            # id is now a composite key like /movie/{movie_id}/{server_id} or /tv/{tv_id}/{server_id}/{episode_id}
-            parts = id.strip('/').split('/')
-            media_type, media_id, server_id = parts[0], parts[1], parts[2]
-            episode_id = parts[3] if len(parts) > 3 else None
+            # The 'id' is now the direct watch URL path from detailContent, e.g., /watch-movie/....
+            watch_url = self.site_url + id
+            
+            # 1. Fetch the watch page to get the iframe src
+            html = self.fetch(watch_url, headers=self.headers).text
+            doc = pq(html)
+            iframe_src = doc('iframe#watch-iframe').attr('src')
 
-            # 1. Get the vidsrc.to embed URL
-            ajax_url = f"{self.site_url}/ajax/v2/embed/servers?id={server_id}"
-            embed_url_encrypted = self.fetch(ajax_url, headers=self.headers).json().get('url')
+            if not iframe_src:
+                # Fallback for different iframe ID or structure
+                iframe_src = doc('iframe').attr('src')
+
+            if not iframe_src:
+                 raise Exception("Could not find iframe src")
+
+            if not iframe_src.startswith('http'):
+                iframe_src = "https:" + iframe_src
             
-            # The embed URL is also encrypted with a key that we can find by analyzing the site's JS
-            # For now, let's assume a static key or a simple decoding process
-            # Let's decode it - it seems to be base64-encoded then reversed
-            embed_url = base64.b64decode(embed_url_encrypted[::-1]).decode('utf-8')
-            
-            if not embed_url.startswith('http'):
-                embed_url = "https:" + embed_url
+            # The iframe src is the embed_url
+            embed_url = iframe_src
 
             # 2. Get the subtitles and the encrypted source URL from vidsrc
             vidsrc_to_url = ""
             vidsrc_id = ""
-            if "vidsrc.to" in embed_url:
-                vidsrc_to_url = embed_url
-                vidsrc_id = urlparse(vidsrc_to_url).path.split('/')[-1]
-            else: # Sometimes it's a different domain like "https://rc.vidsrc.me/"
-                # We need to follow redirects to find the final vidsrc.to URL
-                resp = self.fetch(embed_url, headers=self.headers, allow_redirects=True)
-                vidsrc_to_url = resp.url
-                vidsrc_id = urlparse(vidsrc_to_url).path.split('/')[-1]
             
+            # Follow redirects to get the final vidsrc.to URL
+            resp = self.fetch(embed_url, headers=self.headers, allow_redirects=True)
+            vidsrc_to_url = resp.url
+            if 'vidsrc.to/embed' not in vidsrc_to_url and 'rc.vidsrc.me' not in vidsrc_to_url:
+                 # If the final URL is not a recognized vidsrc domain, it might be a direct file.
+                 return {'parse': 0, 'url': vidsrc_to_url, 'header': {'Referer': self.site_url}}
+
+            vidsrc_id = urlparse(vidsrc_to_url).path.split('/')[-1]
+
             # 3. Get the futoken to make the call to get the final source
             futoken_url = "https://vidsrc.to/futoken"
+            # The referer should be the vidsrc.to embed page
             futoken_resp = self.fetch(futoken_url, headers={'Referer': vidsrc_to_url}).text
             futoken = re.search(r'var\s+k\s*=\s*[\'"]([^\'"]+)', futoken_resp).group(1)
 
             # 4. Get the final encrypted source URL
             key = self._get_vidsrc_key()
+            # Pass the futoken in the request to the media source url
+            query = f'token={futoken}&id={vidsrc_id}'
             final_url_req_url = f"https://vidsrc.to/ajax/embed/source/{vidsrc_id}?token={futoken}"
+            
             source_resp = self.fetch(final_url_req_url, headers={'Referer': vidsrc_to_url}).json()
             
             encoded_source = source_resp.get('result', {}).get('url')
             if not encoded_source:
-                return {'parse': 1, 'url': vidsrc_to_url} # Fallback
+                # If no URL, maybe it's directly playable
+                return {'parse': 1, 'url': vidsrc_to_url}
 
             # 5. Decode the source URL
             decoded_url = self._decode_source_url(encoded_source, key)
@@ -235,7 +249,9 @@ class Spider(Spider):
 
         except Exception as e:
             print(f"Error in playerContent: {e}")
+            import traceback
             traceback.print_exc()
+            # Fallback to the embed URL for debugging in a browser
             return {'parse': 1, 'url': id}
 
     def getMovieList(self, url, pg='1'):
