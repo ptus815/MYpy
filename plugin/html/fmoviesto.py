@@ -22,30 +22,30 @@ class Spider(Spider):
             'origin': self.site_url,
             'referer': self.site_url,
         }
-
+        
     def getName(self):
         return self.site_name
-
+        
     def homeContent(self, filter):
         result = {}
         cate = {
             "电影": "movie",
             "剧集": "tv-show",
-            "动漫": "anime",
-            "热门": "trending",
+            "高分": "top-imdb",
         }
         classes = [{'type_name': k, 'type_id': v} for k, v in cate.items()]
         
         genre_list = ['action', 'adventure', 'animation', 'comedy', 'crime',
-                      'documentary', 'drama', 'family', 'fantasy', 'history',
-                      'horror', 'music', 'mystery', 'romance', 'sci-fi',
-                      'thriller', 'war', 'western']
+                    'documentary', 'drama', 'family', 'fantasy', 'history',
+                    'horror', 'music', 'mystery', 'romance', 'sci-fi',
+                    'thriller', 'war', 'western']
         genre_options = [{"n": genre.capitalize(), "v": genre} for genre in genre_list]
 
         filters = {
             "movie": [{"key": "genre", "name": "类型", "value": genre_options}],
             "tv-show": [{"key": "genre", "name": "类型", "value": genre_options}],
             "anime": [{"key": "genre", "name": "类型", "value": genre_options}],
+            "top-imdb": [],
         }
         
         result['class'] = classes
@@ -72,7 +72,7 @@ class Spider(Spider):
         try:
             html = self.fetch(url, headers=self.headers).text
             doc = pq(html)
-
+            
             # A more precise selector for the title, based on its proximity to the poster
             title = doc('.film-poster').nextAll('h2.film-name').text().strip()
             if not title:
@@ -99,14 +99,14 @@ class Spider(Spider):
             
             genres = [a.text() for a in doc('.film-detail .fd-infor a[href*="genre"]').items()]
             category = ", ".join(genres)
-            
+        
             vod = {
                 "vod_id": ids[0],
                 "vod_name": title,
                 "vod_pic": cover,
                 "type_name": category,
                 "vod_year": year,
-                "vod_area": "", 
+                "vod_area": "",
                 "vod_remarks": duration,
                 "vod_actor": self.get_detail_item(doc, 'Casts'),
                 "vod_director": self.get_detail_item(doc, 'Director'),
@@ -198,28 +198,59 @@ class Spider(Spider):
             iframe_src = doc('iframe#iframe-embed').attr('src')
             if iframe_src and not iframe_src.startswith('http'):
                 iframe_src = f"https:{iframe_src}"
-
-            iframe_html = self.fetch(iframe_src, headers={'Referer': url}).text
             
-            sources_match = re.search(r'sources:\s*(\[.*?\])', iframe_html, re.DOTALL)
+            if not iframe_src:
+                return {'parse': 1, 'url': url} # Cannot find iframe
+
+            # The iframe src is often a redirect, get the final URL
+            iframe_resp = self.fetch(iframe_src, headers={'Referer': url}, allow_redirects=True)
+            final_iframe_url = iframe_resp.url
+            iframe_html = iframe_resp.text
+            
+            # Look for video sources in the iframe content
+            sources_match = re.search(r'sources:\s*(\[.*?\])', iframe_html, re.DOTALL | re.IGNORECASE)
             if sources_match:
                 sources_str = sources_match.group(1)
-                sources = json.loads(sources_str)
-                if sources:
-                    # Find highest quality, assuming it's the first one or contains '1080'
-                    video_url = sources[0].get('file')
-                    for source in sources:
-                        if '1080' in source.get('label', ''):
-                            video_url = source.get('file')
-                            break
+                # It might be javascript array, not perfect json, so we need to parse it carefully
+                # A common format is [{file:"...", type:"...", label:"..."}]
+                file_match = re.search(r'file\s*:\s*["\'](http[^"\']+)', sources_str)
+                if file_match:
+                    video_url = file_match.group(1)
+                    # This URL might be the one we need to do further requests on
+                    # For akmzed.cloud, it's often a master m3u8
+                    if 'akmzed.cloud' in video_url or 'vidcloud' in video_url:
+                        return {
+                            'parse': 0, # direct play
+                            'url': video_url,
+                            'header': {'Referer': final_iframe_url}
+                        }
+
+            # Fallback if the above fails: sometimes there's another AJAX call to get the real source
+            # Example: /ajax/embed-4/getSources?id=...
+            # The 'id' can be extracted from the iframe url
+            try:
+                embed_id_match = re.search(r'[/?&]id=([^&]+)', final_iframe_url)
+                if embed_id_match:
+                    embed_id = embed_id_match.group(1)
+                    sources_url = f"{urlparse(final_iframe_url).scheme}://{urlparse(final_iframe_url).netloc}/ajax/embed-4/getSources?id={embed_id}"
                     
-                    return {
-                        'parse': 0,
-                        'url': video_url,
-                        'header': {'Referer': iframe_src}
-                    }
-            
-            return {'parse': 1, 'url': url} # Fallback
+                    ajax_headers = self.headers.copy()
+                    ajax_headers['Referer'] = final_iframe_url
+                    ajax_headers['x-requested-with'] = 'XMLHttpRequest'
+                    
+                    sources_data = self.get(sources_url, headers=ajax_headers).json()
+                    if sources_data.get('sources'):
+                        video_url = sources_data['sources'][0]['file']
+                        return {
+                            'parse': 0,
+                            'url': video_url,
+                            'header': {'Referer': final_iframe_url}
+                        }
+            except Exception:
+                # This ajax call might fail or not exist, just ignore
+                pass
+
+            return {'parse': 1, 'url': final_iframe_url} # Fallback to sniff
         except Exception as e:
             print(f"Error fetching player content: {e}")
             return {'parse': 1, 'url': url}
@@ -236,7 +267,7 @@ class Spider(Spider):
             vod_id = link.attr('href')
             if not vod_id:
                 continue
-
+            
             vod_name = item.find('.film-name a').attr('title')
             vod_pic = item.find('.film-poster-img').attr('data-src')
             if vod_pic and not vod_pic.startswith('http'):
@@ -272,6 +303,14 @@ class Spider(Spider):
         }
     
     def localProxy(self, params):
+        action = params.get('action')
+        if action == 'm3u8':
+            # This is a placeholder for potential future m3u8 modifications
+            # For now, just proxy it
+            url = params.get('url')
+            headers = {'Referer': params.get('p_ref')}
+            resp = self.fetch(url, headers=headers)
+            return [resp.status_code, resp.headers, resp.text]
         return [200, "text/plain", "Not implemented", {}]
 
 
@@ -288,36 +327,45 @@ if __name__ == "__main__":
         
         print("\n====== Testing Home Video Content ======")
         home_videos = spider.homeVideoContent()
-        print(f"Found {len(home_videos['list'])} videos")
+        print(f"Found {len(home_videos.get('list', []))} videos")
         # Print first 3 items only for brevity
-        for i, video in enumerate(home_videos['list'][:3]):
+        for i, video in enumerate(home_videos.get('list', [])[:3]):
             print(f"Video {i+1}: {video['vod_name']} - {video['vod_id']}")
         
-        if home_videos['list']:
-            print("\n====== Testing Detail Content ======")
-            detail = spider.detailContent([home_videos['list'][0]['vod_id']])
-            print(json.dumps(detail, indent=2))
+        if home_videos.get('list'):
+            # Test a TV Show for multi-episode support
+            # You might need to change this ID to a valid TV show ID from the homepage
+            tv_id = '/tv/arcane-2021-full-94411'
+            print(f"\n====== Testing Detail Content (TV Show: {tv_id}) ======")
+            detail = spider.detailContent([tv_id])
+            print(json.dumps(detail, indent=2, ensure_ascii=False))
             
             if 'list' in detail and detail['list']:
-                play_url = detail['list'][0]['vod_play_url']
-                if '$' in play_url:
-                    vid_url = play_url.split('$')[1]
-                    
-                    print("\n====== Testing Player Content ======")
-                    player = spider.playerContent('', vid_url, {})
-                    print(json.dumps(player, indent=2))
+                vod = detail['list'][0]
+                play_url_str = vod.get('vod_play_url', '')
+                play_from_str = vod.get('vod_play_from', '')
+
+                if play_url_str and '$$$' in play_url_str:
+                    first_line_urls = play_url_str.split('$$$')[0]
+                    first_episode = first_line_urls.split('#')[0]
+                    if '$' in first_episode:
+                        vid_url = first_episode.split('$')[1]
+                        
+                        print("\n====== Testing Player Content ======")
+                        player = spider.playerContent('', vid_url, {})
+                        print(json.dumps(player, indent=2))
         
         print("\n====== Testing Search Content ======")
         search = spider.searchContent("avengers", False)
-        print(f"Found {len(search['list'])} search results")
+        print(f"Found {len(search.get('list', []))} search results")
         # Print first 3 items only for brevity
-        for i, video in enumerate(search['list'][:3]):
+        for i, video in enumerate(search.get('list', [])[:3]):
             print(f"Result {i+1}: {video['vod_name']} - {video['vod_id']}")
         
         print("\n====== Testing Search Content Page 2 ======")
         search_page2 = spider.searchContentPage("avengers", False, 2)
-        print(f"Found {len(search_page2['list'])} search results on page 2")
+        print(f"Found {len(search_page2.get('list', []))} search results on page 2")
         
     except Exception as e:
         print(f"Error during testing: {e}")
-        traceback.print_exc() 
+        traceback.print_exc()
