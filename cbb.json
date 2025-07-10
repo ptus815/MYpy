@@ -1,0 +1,10 @@
+    {
+        "key": "gayvidsclub",
+        "name": "GayVidsClub",
+        "type": 3,
+        "api": "plugin/adult/GayVidsClub.py",
+        "searchable": 1,
+        "quickSearch": 1,
+        "filterable": 0,
+        "changeable": 0
+    }
