@@ -202,26 +202,3 @@ class Spider(Spider):
             'url': id,
             'header': {"User-Agent": "Mozilla/5.0"}
         }
-
-if __name__ == '__main__':
-    try:
-        print("--- 开始Playwright测试 ---")
-        p = Spider()
-        p.init()
-        
-        # 测试分类页
-        cat = p.categoryContent('/videos/all/popular', '1', False, {})
-        print("--- 分类内容 ---")
-        print(cat)
-        
-        # 测试详情页
-        if cat.get('list'):
-            print("\n--- 开始详情测试 ---")
-            detail = p.detailContent([cat['list'][0]['vod_id']])
-            print(detail)
-
-        p.destroy()
-        print("--- 测试结束 ---")
-    except Exception as e:
-        import traceback
-        traceback.print_exc() 
