@@ -1,9 +1,9 @@
-  {
-            "key": "py_91nt",
-            "name": "91男同",
-            "type": 3,
-            "api": "https://raw.githubusercontent.com/ptus815/PQ/refs/heads/main/plugin/adult/py_91nt.py",
-            "searchable": 1,
-            "quickSearch": 1,
-            "filterable": 1
-        }
+{
+    "key": "91nt",
+    "name": "91nt",
+    "type": 3,
+    "api": "https://raw.githubusercontent.com/ptus815/PQ/refs/heads/main/plugin/adult/91nt.py",
+    "searchable": 1,
+    "quickSearch": 1,
+    "filterable": 1
+  }
