@@ -2,7 +2,7 @@
     "key": "91nt",
     "name": "91nt",
     "type": 3,
-    "api": "https://raw.githubusercontent.com/ptus815/PQ/refs/heads/main/plugin/adult/91nt.py",
+    "api": "https://raw.githubusercontent.com/ptus815/PQ/refs/heads/main/plugin/html/电影先生.py",
     "searchable": 1,
     "quickSearch": 1,
     "filterable": 1
