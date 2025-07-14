@@ -1,0 +1,9 @@
+{
+    "key": "电影先生",
+    "name": "电影先生",
+    "type": 3,
+    "api": "https://raw.githubusercontent.com/ptus815/PQ/refs/heads/main/plugin/html/电影先生.py",
+    "searchable": 1,
+    "quickSearch": 1,
+    "filterable": 1
+  }
