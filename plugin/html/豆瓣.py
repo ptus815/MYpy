@@ -1,4 +1,4 @@
-      import json                                                                                            
+     import json                                                                                            
 │ │ import re                                                                                              │ │
 │ │ from urllib.parse import urljoin                                                                       │ │
 │ │ from spider import Spider                                                                              │ │
