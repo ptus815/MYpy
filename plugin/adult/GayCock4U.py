@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-# by @AI Assistant
-'''
-GayCock4U 爬虫插件
-支持视频分类、搜索、播放等功能
-视频托管平台：DoodStream
-'''
 import re
 import json
 import sys
@@ -486,5 +479,3 @@ class Spider(Spider):
         except Exception as e:
             self.log(f"默认代理失败: {str(e)}")
             return [500, "text/plain", f"Error: {str(e)}"]
-
-
