@@ -314,9 +314,16 @@ class Spider(Spider):
             if platform == 'DoodStream':
                 return self.parseDoodStream(video_id)
             elif platform == 'Direct':
+                # 兼容 FongMi header 处理：大小写各一份
                 headers = self.headers.copy()
-                if flag:
-                    headers['Referer'] = flag
+                ref = flag or video_id
+                parsed = urlparse(ref)
+                referer = f"{parsed.scheme}://{parsed.netloc}/"
+                headers['Referer'] = referer
+                headers['referer'] = referer
+                headers['Origin'] = f"{parsed.scheme}://{parsed.netloc}"
+                headers['User-Agent'] = self.headers['User-Agent']
+                headers['user-agent'] = self.headers['User-Agent']
                 return {'parse': 0, 'url': video_id, 'header': headers}
             else:
                 return self.parseDefaultVideo(video_id)
@@ -333,9 +340,12 @@ class Spider(Spider):
             headers = self.headers.copy()
             headers.update({
                 'Referer': embed_url,
+                'referer': embed_url,
                 'Origin': origin,
                 'Accept': '*/*',
-                'X-Requested-With': 'XMLHttpRequest'
+                'X-Requested-With': 'XMLHttpRequest',
+                'User-Agent': self.headers['User-Agent'],
+                'user-agent': self.headers['User-Agent']
             })
 
             # 先加载 embed 页面（有时需要 cookie）
@@ -356,10 +366,23 @@ class Spider(Spider):
                 jump_url = f"{origin}{pass_md5_path}"
                 r1 = self.session.get(jump_url, headers=headers, allow_redirects=False, timeout=20)
                 loc = r1.headers.get('Location')
+                if not loc:
+                    r1b = self.session.get(jump_url, headers=headers, allow_redirects=True, timeout=20)
+                    loc = r1b.url if r1b.url and ('http' in r1b.url) else None
                 if loc:
                     return {'parse': 0, 'url': loc, 'header': headers}
 
-            # 尝试 2：/d/<code> 直跳
+            # 尝试 2：/download/、/d/<code>
+            md = re.search(r"/download/[^\"']+", html)
+            if md:
+                durl = f"{origin}{md.group(0)}"
+                r2a = self.session.head(durl, headers=headers, allow_redirects=False, timeout=20)
+                loc = r2a.headers.get('Location')
+                if not loc:
+                    r2b = self.session.get(durl, headers=headers, allow_redirects=False, timeout=20)
+                    loc = r2b.headers.get('Location')
+                if loc:
+                    return {'parse': 0, 'url': loc, 'header': headers}
             if code:
                 d_url = f"{origin}/d/{code}"
                 r2 = self.session.get(d_url, headers=headers, allow_redirects=False, timeout=20)
@@ -377,7 +400,7 @@ class Spider(Spider):
                 if mm:
                     return {'parse': 0, 'url': mm[0], 'header': headers}
 
-            # 尝试 4：域名回退（dood.li / d000d.com 等）
+            # 尝试 4：域名回退
             fallback_hosts = ['https://dood.li', 'https://dood.wf', 'https://dood.pm', 'https://doodstream.com']
             if code:
                 for host in fallback_hosts:
@@ -389,12 +412,12 @@ class Spider(Spider):
                     except Exception:
                         continue
 
-            # 兜底：交给上游
             return {'parse': 1, 'url': embed_url, 'header': headers}
         except Exception as e:
             self.log(f"DoodStream解析失败: {str(e)}")
             headers = self.headers.copy()
             headers['Referer'] = embed_url
+            headers['referer'] = embed_url
             return {'parse': 1, 'url': embed_url, 'header': headers}
 
     def parseDefaultVideo(self, page_url: str):
@@ -479,3 +502,5 @@ class Spider(Spider):
         except Exception as e:
             self.log(f"默认代理失败: {str(e)}")
             return [500, "text/plain", f"Error: {str(e)}"]
+
+
