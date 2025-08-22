@@ -333,27 +333,48 @@ class Spider(Spider):
             return {'parse': 0, 'url': '', 'header': self.headers}
 
     def parseDoodStream(self, embed_url: str):
-        """解析 DoodStream：从 iframe/embed 页面提取 pass_md5 跳转并拿直链（带 Referer）"""
+        """解析 DoodStream：从 iframe/embed 页面获取直链；若失败则返回 embed 让上游解析"""
         try:
+            parsed = urlparse(embed_url)
+            origin = f"{parsed.scheme}://{parsed.netloc}"
             headers = self.headers.copy()
-            headers['Referer'] = embed_url
-            r = self.session.get(embed_url, headers=headers, timeout=20)
-            r.raise_for_status()
-            html = r.text
+            headers.update({
+                'Referer': embed_url,
+                'Origin': origin,
+                'Accept': '*/*',
+                'X-Requested-With': 'XMLHttpRequest'
+            })
 
-            # 1) 优先查找 pass_md5 跳转接口
-            m = re.search(r"/pass_md5/[^\"']+", html)
-            if m:
-                pass_md5_path = m.group(0)
-                # 补全域名（使用 embed_url 的域）
-                parsed = urlparse(embed_url)
-                jump_url = f"{parsed.scheme}://{parsed.netloc}{pass_md5_path}"
-                r2 = self.session.get(jump_url, headers=headers, allow_redirects=False, timeout=20)
-                if 'Location' in r2.headers:
-                    final_url = r2.headers['Location']
-                    return {'parse': 0, 'url': final_url, 'header': headers}
+            # 先加载 embed 页面（有时需要 cookie）
+            r0 = self.session.get(embed_url, headers=headers, timeout=20)
+            r0.raise_for_status()
+            html = r0.text
 
-            # 2) 兼容：部分页面直接内嵌 doodcdn/cloudatacdn 直链
+            # 尝试 1：pass_md5 跳转
+            code = ''
+            mcode = re.search(r'/[ed]/([a-zA-Z0-9]+)', embed_url)
+            if mcode:
+                code = mcode.group(1)
+            mpass = re.search(r"/pass_md5/([a-zA-Z0-9]+)", html)
+            if not mpass and code:
+                mpass = re.search(r"/pass_md5/" + re.escape(code), html)
+            if mpass:
+                pass_md5_path = mpass.group(0)
+                jump_url = f"{origin}{pass_md5_path}"
+                r1 = self.session.get(jump_url, headers=headers, allow_redirects=False, timeout=20)
+                loc = r1.headers.get('Location')
+                if loc:
+                    return {'parse': 0, 'url': loc, 'header': headers}
+
+            # 尝试 2：/d/<code> 直跳
+            if code:
+                d_url = f"{origin}/d/{code}"
+                r2 = self.session.get(d_url, headers=headers, allow_redirects=False, timeout=20)
+                loc = r2.headers.get('Location')
+                if loc:
+                    return {'parse': 0, 'url': loc, 'header': headers}
+
+            # 尝试 3：页面内直链
             for pattern in [
                 r'https://[^"\']*\.cloudatacdn\.com/[^"\']*',
                 r'https://[^"\']*\.doodcdn\.com/[^"\']*',
@@ -363,7 +384,19 @@ class Spider(Spider):
                 if mm:
                     return {'parse': 0, 'url': mm[0], 'header': headers}
 
-            # 3) 兜底：返回 embed 地址，由上游解析
+            # 尝试 4：域名回退（dood.li / d000d.com 等）
+            fallback_hosts = ['https://dood.li', 'https://dood.wf', 'https://dood.pm', 'https://doodstream.com']
+            if code:
+                for host in fallback_hosts:
+                    try:
+                        r3 = self.session.get(f"{host}/d/{code}", headers=headers, allow_redirects=False, timeout=15)
+                        loc = r3.headers.get('Location')
+                        if loc:
+                            return {'parse': 0, 'url': loc, 'header': headers}
+                    except Exception:
+                        continue
+
+            # 兜底：交给上游
             return {'parse': 1, 'url': embed_url, 'header': headers}
         except Exception as e:
             self.log(f"DoodStream解析失败: {str(e)}")
