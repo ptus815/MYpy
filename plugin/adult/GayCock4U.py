@@ -1,7 +1,9 @@
 import re
 import json
 import sys
-from urllib.parse import urljoin, urlparse
+import time
+import random
+from urllib.parse import urljoin, urlparse, parse_qs
 from base64 import b64encode, b64decode
 
 import requests
@@ -19,23 +21,49 @@ class Spider(Spider):
             self.proxies = {}
         
         self.host = "https://gaycock4u.com"
+        self.user_agents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        ]
+        
         self.headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
-            'Accept-Encoding': 'gzip, deflate',
+            'User-Agent': random.choice(self.user_agents),
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
             'DNT': '1',
             'Connection': 'keep-alive',
             'Upgrade-Insecure-Requests': '1',
             'Sec-Fetch-Dest': 'document',
             'Sec-Fetch-Mode': 'navigate',
             'Sec-Fetch-Site': 'none',
-            'Cache-Control': 'max-age=0'
+            'Sec-Fetch-User': '?1',
+            'Cache-Control': 'max-age=0',
+            'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+            'sec-ch-ua-mobile': '?0',
+            'sec-ch-ua-platform': '"Windows"'
         }
         
         self.session = requests.Session()
         self.session.proxies.update(self.proxies)
         self.session.headers.update(self.headers)
+        
+        # 视频托管平台识别器
+        self.video_platforms = {
+            'dood': self.parseDoodStream,
+            'streamtape': self.parseStreamtape,
+            'streamsb': self.parseStreamSB,
+            'streamlare': self.parseStreamlare,
+            'vido': self.parseVido,
+            'mp4upload': self.parseMp4Upload,
+            'direct': self.parseDirect
+        }
+
+    def getRandomUserAgent(self):
+        """获取随机User-Agent"""
+        return random.choice(self.user_agents)
 
     def e64(self, text: str) -> str:
         try:
@@ -116,7 +144,12 @@ class Spider(Spider):
             url = f"{self.host}/page/{pg}/" if pg != '1' else self.host
         
         try:
-            response = self.session.get(url, timeout=20)
+            # 模拟真实浏览器访问
+            headers = self.headers.copy()
+            headers['User-Agent'] = self.getRandomUserAgent()
+            headers['Referer'] = self.host
+            
+            response = self.session.get(url, headers=headers, timeout=30)
             response.raise_for_status()
             html = response.text
             doc = pq(html)
@@ -143,7 +176,7 @@ class Spider(Spider):
                         if srcset:
                             pic = srcset.split(' ')[0]
                     
-                    # 时长信息（尽力而为）
+                    # 时长信息
                     info_elem = article('.video-info, .video-duration, [class*="duration"]')
                     duration = info_elem.text().strip() if info_elem else ''
                     
@@ -170,7 +203,13 @@ class Spider(Spider):
     def detailContent(self, ids):
         try:
             url = ids[0]
-            response = self.session.get(url, timeout=20)
+            
+            # 模拟真实浏览器访问
+            headers = self.headers.copy()
+            headers['User-Agent'] = self.getRandomUserAgent()
+            headers['Referer'] = self.host
+            
+            response = self.session.get(url, headers=headers, timeout=30)
             response.raise_for_status()
             html = response.text
             doc = pq(html)
@@ -210,31 +249,35 @@ class Spider(Spider):
             if studio_elem:
                 studio = studio_elem.text().strip()
             
-            # 播放器 iframe（只收集 iframe 源地址，不直接返回直链）
+            # 只提取 iframe 地址（不直接拼 DoodStream 链接）
             video_urls = []
+            
+            # 方法1：PyQuery查找iframe
             for iframe in doc('iframe[src]').items():
                 src = iframe.attr('src')
-                if not src:
-                    continue
-                if 'd-s.io' in src or 'dood' in src:
-                    video_urls.append(f"DoodStream${self.e64(src)}")
+                if src and 'http' in src:
+                    platform = self.identifyPlatform(src)
+                    video_urls.append(f"{platform}${self.e64(src)}")
             
-            # 源码兜底（同样存为 DoodStream 平台 + base64 iframe 源）
+            # 方法2：正则匹配iframe（兜底）
             if not video_urls:
-                for pattern in [
-                    r'https://d-s\.io/e/[a-zA-Z0-9]+' ,
-                    r'https://[^"\']*\.doodcdn\.com/[^"\']*',
-                    r'https://[^"\']*\.cloudatacdn\.com/[^"\']*'
-                ]:
-                    m = re.findall(pattern, html)
-                    if m:
-                        for match in m:
-                            if 'd-s.io' in match or 'dood' in match:
-                                video_urls.append(f"DoodStream${self.e64(match)}")
-                            else:
-                                video_urls.append(f"Direct${self.e64(match)}")
-                        break
+                iframe_pattern = r'<iframe[^>]*src=["\']([^"\']+)["\'][^>]*>'
+                matches = re.findall(iframe_pattern, html, re.IGNORECASE)
+                for match in matches:
+                    if match and 'http' in match:
+                        platform = self.identifyPlatform(match)
+                        video_urls.append(f"{platform}${self.e64(match)}")
             
+            # 方法3：查找其他视频嵌入（如embed标签）
+            if not video_urls:
+                embed_pattern = r'<embed[^>]*src=["\']([^"\']+)["\'][^>]*>'
+                matches = re.findall(embed_pattern, html, re.IGNORECASE)
+                for match in matches:
+                    if match and 'http' in match:
+                        platform = self.identifyPlatform(match)
+                        video_urls.append(f"{platform}${self.e64(match)}")
+            
+            # 兜底：如果没有找到任何iframe，使用页面URL
             if not video_urls:
                 video_urls.append(f"Default${self.e64(url)}")
             
@@ -252,12 +295,58 @@ class Spider(Spider):
             self.log(f"获取视频详情失败: {str(e)}")
             return {'list': []}
 
+
+
+    def identifyPlatform(self, url):
+        """识别视频托管平台 - 使用精确的正向匹配规则"""
+        url_lower = url.lower()
+        
+        # DoodStream 相关域名
+        if any(domain in url_lower for domain in ['d-s.io', 'doodstream.com', 'dood.li', 'dood.wf', 'dood.pm', 'd000d.com']):
+            return 'DoodStream'
+        
+        # Streamtape
+        elif 'streamtape.com' in url_lower:
+            return 'Streamtape'
+        
+        # StreamSB
+        elif 'streamsb.net' in url_lower:
+            return 'StreamSB'
+        
+        # Streamlare
+        elif 'streamlare.com' in url_lower:
+            return 'Streamlare'
+        
+        # Vido
+        elif 'vido.co' in url_lower:
+            return 'Vido'
+        
+        # Mp4Upload
+        elif 'mp4upload.com' in url_lower:
+            return 'Mp4Upload'
+        
+        # 直链视频文件
+        elif any(ext in url_lower for ext in ['.mp4', '.m3u8', '.ts', '.avi', '.mkv']):
+            return 'Direct'
+        
+        # 其他CDN直链
+        elif any(cdn in url_lower for cdn in ['cloudatacdn.com', 'doodcdn.com', 'dood.stream']):
+            return 'Direct'
+        
+        # 默认
+        else:
+            return 'Default'
+
     def searchContent(self, key, quick, pg="1"):
         try:
             url = f"{self.host}/"
             params = {'s': key}
             
-            response = self.session.get(url, params=params, timeout=20)
+            headers = self.headers.copy()
+            headers['User-Agent'] = self.getRandomUserAgent()
+            headers['Referer'] = self.host
+            
+            response = self.session.get(url, params=params, headers=headers, timeout=30)
             response.raise_for_status()
             html = response.text
             doc = pq(html)
@@ -311,125 +400,346 @@ class Spider(Spider):
             decoded = self.d64(payload)
             video_id = decoded if decoded else payload
             
+            # 取出 iframe_url，传给对应的解析器
             if platform == 'DoodStream':
-                return self.parseDoodStream(video_id)
+                return self.parseDoodStream(video_id, flag)
+            elif platform == 'Streamtape':
+                return self.parseStreamtape(video_id, flag)
+            elif platform == 'StreamSB':
+                return self.parseStreamSB(video_id, flag)
+            elif platform == 'Streamlare':
+                return self.parseStreamlare(video_id, flag)
+            elif platform == 'Vido':
+                return self.parseVido(video_id, flag)
+            elif platform == 'Mp4Upload':
+                return self.parseMp4Upload(video_id, flag)
             elif platform == 'Direct':
-                # 兼容 FongMi header 处理：大小写各一份
-                headers = self.headers.copy()
-                ref = flag or video_id
-                parsed = urlparse(ref)
-                referer = f"{parsed.scheme}://{parsed.netloc}/"
-                headers['Referer'] = referer
-                headers['referer'] = referer
-                headers['Origin'] = f"{parsed.scheme}://{parsed.netloc}"
-                headers['User-Agent'] = self.headers['User-Agent']
-                headers['user-agent'] = self.headers['User-Agent']
-                return {'parse': 0, 'url': video_id, 'header': headers}
+                return self.parseDirect(video_id, flag)
             else:
-                return self.parseDefaultVideo(video_id)
+                return self.parseDefaultVideo(video_id, flag)
                 
         except Exception as e:
             self.log(f"播放器内容获取失败: {str(e)}")
             return {'parse': 0, 'url': '', 'header': self.headers}
 
-    def parseDoodStream(self, embed_url: str):
-        """解析 DoodStream：从 iframe/embed 页面获取直链；若失败则返回 embed 让上游解析"""
+    def parseDoodStream(self, embed_url, referer=""):
+        """解析 DoodStream - 完整处理 dood 的跳转链拿 mp4"""
         try:
             parsed = urlparse(embed_url)
             origin = f"{parsed.scheme}://{parsed.netloc}"
-            headers = self.headers.copy()
-            headers.update({
-                'Referer': embed_url,
-                'referer': embed_url,
-                'Origin': origin,
-                'Accept': '*/*',
-                'X-Requested-With': 'XMLHttpRequest',
-                'User-Agent': self.headers['User-Agent'],
-                'user-agent': self.headers['User-Agent']
-            })
-
-            # 先加载 embed 页面（有时需要 cookie）
-            r0 = self.session.get(embed_url, headers=headers, timeout=20)
+            
+            # 构建完整的浏览器请求头
+            headers = {
+                'User-Agent': self.getRandomUserAgent(),
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'zh-CN,zh;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'DNT': '1',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+                'Sec-Fetch-Dest': 'document',
+                'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'cross-site',
+                'Referer': referer or self.host,
+                'Origin': self.host,
+                'Cache-Control': 'max-age=0'
+            }
+            
+            # 第一步：访问 embed 页面
+            r0 = self.session.get(embed_url, headers=headers, timeout=30)
             r0.raise_for_status()
             html = r0.text
-
-            # 尝试 1：pass_md5 跳转
+            
+            # 提取视频代码
             code = ''
             mcode = re.search(r'/[ed]/([a-zA-Z0-9]+)', embed_url)
             if mcode:
                 code = mcode.group(1)
-            mpass = re.search(r"/pass_md5/([a-zA-Z0-9]+)", html)
-            if not mpass and code:
-                mpass = re.search(r"/pass_md5/" + re.escape(code), html)
-            if mpass:
-                pass_md5_path = mpass.group(0)
-                jump_url = f"{origin}{pass_md5_path}"
-                r1 = self.session.get(jump_url, headers=headers, allow_redirects=False, timeout=20)
-                loc = r1.headers.get('Location')
-                if not loc:
-                    r1b = self.session.get(jump_url, headers=headers, allow_redirects=True, timeout=20)
-                    loc = r1b.url if r1b.url and ('http' in r1b.url) else None
-                if loc:
-                    return {'parse': 0, 'url': loc, 'header': headers}
-
-            # 尝试 2：/download/、/d/<code>
-            md = re.search(r"/download/[^\"']+", html)
-            if md:
-                durl = f"{origin}{md.group(0)}"
-                r2a = self.session.head(durl, headers=headers, allow_redirects=False, timeout=20)
-                loc = r2a.headers.get('Location')
-                if not loc:
-                    r2b = self.session.get(durl, headers=headers, allow_redirects=False, timeout=20)
-                    loc = r2b.headers.get('Location')
-                if loc:
-                    return {'parse': 0, 'url': loc, 'header': headers}
-            if code:
-                d_url = f"{origin}/d/{code}"
-                r2 = self.session.get(d_url, headers=headers, allow_redirects=False, timeout=20)
-                loc = r2.headers.get('Location')
-                if loc:
-                    return {'parse': 0, 'url': loc, 'header': headers}
-
-            # 尝试 3：页面内直链
-            for pattern in [
-                r'https://[^"\']*\.cloudatacdn\.com/[^"\']*',
-                r'https://[^"\']*\.doodcdn\.com/[^"\']*',
-                r'https://[^"\']*\.dood\.stream/[^"\']*'
-            ]:
-                mm = re.findall(pattern, html)
-                if mm:
-                    return {'parse': 0, 'url': mm[0], 'header': headers}
-
-            # 尝试 4：域名回退
-            fallback_hosts = ['https://dood.li', 'https://dood.wf', 'https://dood.pm', 'https://doodstream.com']
-            if code:
-                for host in fallback_hosts:
-                    try:
-                        r3 = self.session.get(f"{host}/d/{code}", headers=headers, allow_redirects=False, timeout=15)
-                        loc = r3.headers.get('Location')
-                        if loc:
-                            return {'parse': 0, 'url': loc, 'header': headers}
-                    except Exception:
-                        continue
-
+            
+            # 尝试多种方法获取直链（按优先级排序）
+            methods = [
+                lambda: self._tryPassMd5(origin, code, html, headers),
+                lambda: self._tryDirectDownload(origin, code, html, headers),
+                lambda: self._tryPageDirectLinks(html, headers),
+                lambda: self._tryDomainFallback(code, headers),
+                lambda: self._tryEmbedPageAnalysis(embed_url, html, headers)
+            ]
+            
+            for method in methods:
+                try:
+                    result = method()
+                    if result and result.get('parse') == 0:
+                        self.log(f"DoodStream解析成功: {result['url']}")
+                        return result
+                except Exception as e:
+                    self.log(f"DoodStream解析方法失败: {str(e)}")
+                    continue
+            
+            # 兜底：返回 embed 让上游处理
+            self.log(f"DoodStream解析失败，返回embed: {embed_url}")
             return {'parse': 1, 'url': embed_url, 'header': headers}
+            
         except Exception as e:
             self.log(f"DoodStream解析失败: {str(e)}")
             headers = self.headers.copy()
-            headers['Referer'] = embed_url
-            headers['referer'] = embed_url
+            headers['Referer'] = referer or self.host
             return {'parse': 1, 'url': embed_url, 'header': headers}
 
-    def parseDefaultVideo(self, page_url: str):
-        """解析默认页面中的视频：尝试发现 dood 或直链"""
+    def _tryPassMd5(self, origin, code, html, headers):
+        """尝试 pass_md5 方法"""
+        if not code:
+            return None
+            
+        # 查找 pass_md5 路径
+        mpass = re.search(r"/pass_md5/([a-zA-Z0-9]+)", html)
+        if not mpass:
+            mpass = re.search(r"/pass_md5/" + re.escape(code), html)
+        
+        if mpass:
+            pass_md5_path = mpass.group(0)
+            jump_url = f"{origin}{pass_md5_path}"
+            
+            # 先尝试 HEAD 请求
+            try:
+                r1 = self.session.head(jump_url, headers=headers, allow_redirects=False, timeout=20)
+                loc = r1.headers.get('Location')
+                if loc:
+                    return {'parse': 0, 'url': loc, 'header': headers}
+            except:
+                pass
+            
+            # 再尝试 GET 请求
+            try:
+                r1 = self.session.get(jump_url, headers=headers, allow_redirects=False, timeout=20)
+                loc = r1.headers.get('Location')
+                if loc:
+                    return {'parse': 0, 'url': loc, 'header': headers}
+            except:
+                pass
+            
+            # 最后尝试跟随重定向
+            try:
+                r1 = self.session.get(jump_url, headers=headers, allow_redirects=True, timeout=20)
+                if r1.url and r1.url != jump_url and 'http' in r1.url:
+                    return {'parse': 0, 'url': r1.url, 'header': headers}
+            except:
+                pass
+        
+        return None
+
+    def _tryDirectDownload(self, origin, code, html, headers):
+        """尝试直接下载链接"""
+        if not code:
+            return None
+            
+        # 尝试 /d/<code>
+        d_url = f"{origin}/d/{code}"
         try:
-            r = self.session.get(page_url, timeout=20)
+            r2 = self.session.get(d_url, headers=headers, allow_redirects=False, timeout=20)
+            loc = r2.headers.get('Location')
+            if loc:
+                return {'parse': 0, 'url': loc, 'header': headers}
+        except:
+            pass
+        
+        # 尝试 /download/
+        md = re.search(r"/download/[^\"']+", html)
+        if md:
+            durl = f"{origin}{md.group(0)}"
+            try:
+                r2a = self.session.head(durl, headers=headers, allow_redirects=False, timeout=20)
+                loc = r2a.headers.get('Location')
+                if loc:
+                    return {'parse': 0, 'url': loc, 'header': headers}
+            except:
+                pass
+        
+        return None
+
+    def _tryPageDirectLinks(self, html, headers):
+        """尝试从页面源码提取直链"""
+        patterns = [
+            r'https://[^"\']*\.cloudatacdn\.com/[^"\']*',
+            r'https://[^"\']*\.doodcdn\.com/[^"\']*',
+            r'https://[^"\']*\.dood\.stream/[^"\']*'
+        ]
+        
+        for pattern in patterns:
+            matches = re.findall(pattern, html)
+            if matches:
+                return {'parse': 0, 'url': matches[0], 'header': headers}
+        
+        return None
+
+    def _tryDomainFallback(self, code, headers):
+        """尝试域名回退"""
+        if not code:
+            return None
+            
+        fallback_hosts = [
+            'https://dood.li', 'https://dood.wf', 'https://dood.pm', 
+            'https://doodstream.com', 'https://d000d.com'
+        ]
+        
+        for host in fallback_hosts:
+            try:
+                r3 = self.session.get(f"{host}/d/{code}", headers=headers, allow_redirects=False, timeout=15)
+                loc = r3.headers.get('Location')
+                if loc:
+                    return {'parse': 0, 'url': loc, 'header': headers}
+            except:
+                continue
+        
+        return None
+
+    def _tryEmbedPageAnalysis(self, embed_url, html, headers):
+        """分析 embed 页面，寻找隐藏的播放信息"""
+        try:
+            # 查找 JavaScript 中的播放信息
+            js_patterns = [
+                r'file\s*:\s*["\']([^"\']+)["\']',
+                r'source\s*:\s*["\']([^"\']+)["\']',
+                r'url\s*:\s*["\']([^"\']+)["\']'
+            ]
+            
+            for pattern in js_patterns:
+                matches = re.findall(pattern, html)
+                for match in matches:
+                    if match and ('http' in match) and any(ext in match.lower() for ext in ['.mp4', '.m3u8']):
+                        return {'parse': 0, 'url': match, 'header': headers}
+        except:
+            pass
+        
+        return None
+
+    def parseStreamtape(self, embed_url, referer=""):
+        """解析 Streamtape"""
+        try:
+            # 提取视频ID
+            video_id = re.search(r'/e/([a-zA-Z0-9]+)', embed_url)
+            if video_id:
+                video_id = video_id.group(1)
+                # 构建直链
+                direct_url = f"https://streamtape.com/get_video?id={video_id}"
+                headers = self.headers.copy()
+                headers['Referer'] = referer or self.host
+                return {'parse': 0, 'url': direct_url, 'header': headers}
+        except:
+            pass
+        
+        return {'parse': 1, 'url': embed_url, 'header': self.headers}
+
+    def parseStreamSB(self, embed_url, referer=""):
+        """解析 StreamSB"""
+        try:
+            # 提取视频ID
+            video_id = re.search(r'/e/([a-zA-Z0-9]+)', embed_url)
+            if video_id:
+                video_id = video_id.group(1)
+                # 构建直链
+                direct_url = f"https://streamsb.net/play/{video_id}/"
+                headers = self.headers.copy()
+                headers['Referer'] = referer or self.host
+                return {'parse': 0, 'url': direct_url, 'header': headers}
+        except:
+            pass
+        
+        return {'parse': 1, 'url': embed_url, 'header': self.headers}
+
+    def parseStreamlare(self, embed_url, referer=""):
+        """解析 Streamlare"""
+        try:
+            # 提取视频ID
+            video_id = re.search(r'/e/([a-zA-Z0-9]+)', embed_url)
+            if video_id:
+                video_id = video_id.group(1)
+                # 构建直链
+                direct_url = f"https://streamlare.com/e/{video_id}"
+                headers = self.headers.copy()
+                headers['Referer'] = referer or self.host
+                return {'parse': 0, 'url': direct_url, 'header': headers}
+        except:
+            pass
+        
+        return {'parse': 1, 'url': embed_url, 'header': self.headers}
+
+    def parseVido(self, embed_url, referer=""):
+        """解析 Vido"""
+        try:
+            # 提取视频ID
+            video_id = re.search(r'/v/([a-zA-Z0-9]+)', embed_url)
+            if video_id:
+                video_id = video_id.group(1)
+                # 构建直链
+                direct_url = f"https://vido.co/v/{video_id}"
+                headers = self.headers.copy()
+                headers['Referer'] = referer or self.host
+                return {'parse': 0, 'url': direct_url, 'header': headers}
+        except:
+            pass
+        
+        return {'parse': 1, 'url': embed_url, 'header': self.headers}
+
+    def parseMp4Upload(self, embed_url, referer=""):
+        """解析 Mp4Upload"""
+        try:
+            # 提取视频ID
+            video_id = re.search(r'/embed/([a-zA-Z0-9]+)', embed_url)
+            if video_id:
+                video_id = video_id.group(1)
+                # 构建直链
+                direct_url = f"https://mp4upload.com/embed/{video_id}"
+                headers = self.headers.copy()
+                headers['Referer'] = referer or self.host
+                return {'parse': 0, 'url': direct_url, 'header': headers}
+        except:
+            pass
+        
+        return {'parse': 1, 'url': embed_url, 'header': self.headers}
+
+    def parseDirect(self, url, referer=""):
+        """解析直链"""
+        headers = self.headers.copy()
+        headers['Referer'] = referer or self.host
+        return {'parse': 0, 'url': url, 'header': headers}
+
+    def parseDefaultVideo(self, page_url, referer=""):
+        """解析默认页面中的视频"""
+        try:
+            headers = self.headers.copy()
+            headers['User-Agent'] = self.getRandomUserAgent()
+            headers['Referer'] = referer or self.host
+            
+            r = self.session.get(page_url, headers=headers, timeout=30)
             r.raise_for_status()
             html = r.text
-            if 'd-s.io' in html or 'dood' in html:
-                dood_match = re.search(r'https://d-s\.io/e/[a-zA-Z0-9]+', html)
-                if dood_match:
-                    return self.parseDoodStream(dood_match.group())
+            
+            # 尝试发现各种视频平台
+            for platform_name, platform_parser in self.video_platforms.items():
+                if platform_name == 'direct':
+                    continue
+                    
+                # 查找对应的嵌入链接
+                if platform_name == 'dood':
+                    pattern = r'https://d-s\.io/e/[a-zA-Z0-9]+'
+                elif platform_name == 'streamtape':
+                    pattern = r'https://streamtape\.com/e/[a-zA-Z0-9]+'
+                elif platform_name == 'streamsb':
+                    pattern = r'https://streamsb\.net/e/[a-zA-Z0-9]+'
+                elif platform_name == 'streamlare':
+                    pattern = r'https://streamlare\.com/e/[a-zA-Z0-9]+'
+                elif platform_name == 'vido':
+                    pattern = r'https://vido\.co/v/[a-zA-Z0-9]+'
+                elif platform_name == 'mp4upload':
+                    pattern = r'https://mp4upload\.com/embed/[a-zA-Z0-9]+'
+                else:
+                    continue
+                
+                match = re.search(pattern, html)
+                if match:
+                    return platform_parser(match.group(), referer)
+            
+            # 查找直链
             for pattern in [
                 r'https://[^"\']*\.cloudatacdn\.com/[^"\']*',
                 r'https://[^"\']*\.doodcdn\.com/[^"\']*',
@@ -438,8 +748,9 @@ class Spider(Spider):
             ]:
                 matches = re.findall(pattern, html)
                 if matches:
-                    return {'parse': 0, 'url': matches[0], 'header': self.headers}
-            return {'parse': 1, 'url': page_url, 'header': self.headers}
+                    return self.parseDirect(matches[0], referer)
+            
+            return {'parse': 1, 'url': page_url, 'header': headers}
         except Exception as e:
             self.log(f"默认视频解析失败: {str(e)}")
             return {'parse': 1, 'url': page_url, 'header': self.headers}
@@ -464,18 +775,25 @@ class Spider(Spider):
     def proxyM3u8(self, url):
         """代理M3U8文件"""
         try:
-            response = self.session.get(url, timeout=20)
+            headers = self.headers.copy()
+            headers['User-Agent'] = self.getRandomUserAgent()
+            
+            response = self.session.get(url, headers=headers, timeout=30)
             response.raise_for_status()
+            
             # 避免编码问题，直接用字节解码
             try:
                 content = response.content.decode('utf-8', errors='ignore')
             except Exception:
                 content = response.text
+            
+            # 处理相对路径
             base_url = url[:url.rfind('/') + 1]
             lines = content.split('\n')
             for i, line in enumerate(lines):
                 if line and not line.startswith('#') and not line.startswith('http'):
                     lines[i] = base_url + line
+            
             content = '\n'.join(lines)
             return [200, "application/vnd.apple.mpegurl", content]
         except Exception as e:
@@ -485,7 +803,10 @@ class Spider(Spider):
     def proxyMp4(self, url):
         """代理MP4文件"""
         try:
-            response = self.session.get(url, stream=True, timeout=20)
+            headers = self.headers.copy()
+            headers['User-Agent'] = self.getRandomUserAgent()
+            
+            response = self.session.get(url, headers=headers, stream=True, timeout=30)
             response.raise_for_status()
             return [200, response.headers.get('Content-Type', 'video/mp4'), response.content]
         except Exception as e:
@@ -495,7 +816,10 @@ class Spider(Spider):
     def proxyDefault(self, url):
         """默认代理处理"""
         try:
-            response = self.session.get(url, timeout=20)
+            headers = self.headers.copy()
+            headers['User-Agent'] = self.getRandomUserAgent()
+            
+            response = self.session.get(url, headers=headers, timeout=30)
             response.raise_for_status()
             content_type = response.headers.get('Content-Type', 'application/octet-stream')
             return [200, content_type, response.content]
