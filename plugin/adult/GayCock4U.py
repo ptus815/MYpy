@@ -249,29 +249,20 @@ class Spider(Spider):
             if studio_elem:
                 studio = studio_elem.text().strip()
             
-            # 只提取 iframe 地址（不直接拼 DoodStream 链接）
+            # 两种核心方法提取视频地址
             video_urls = []
             
-            # 方法1：PyQuery查找iframe
+            # 方法1：PyQuery正向匹配iframe（主要方法）
             for iframe in doc('iframe[src]').items():
                 src = iframe.attr('src')
                 if src and 'http' in src:
                     platform = self.identifyPlatform(src)
                     video_urls.append(f"{platform}${self.e64(src)}")
             
-            # 方法2：正则匹配iframe（兜底）
+            # 方法2：正则嗅探兜底（如果PyQuery没找到）
             if not video_urls:
                 iframe_pattern = r'<iframe[^>]*src=["\']([^"\']+)["\'][^>]*>'
                 matches = re.findall(iframe_pattern, html, re.IGNORECASE)
-                for match in matches:
-                    if match and 'http' in match:
-                        platform = self.identifyPlatform(match)
-                        video_urls.append(f"{platform}${self.e64(match)}")
-            
-            # 方法3：查找其他视频嵌入（如embed标签）
-            if not video_urls:
-                embed_pattern = r'<embed[^>]*src=["\']([^"\']+)["\'][^>]*>'
-                matches = re.findall(embed_pattern, html, re.IGNORECASE)
                 for match in matches:
                     if match and 'http' in match:
                         platform = self.identifyPlatform(match)
@@ -294,8 +285,6 @@ class Spider(Spider):
         except Exception as e:
             self.log(f"获取视频详情失败: {str(e)}")
             return {'list': []}
-
-
 
     def identifyPlatform(self, url):
         """识别视频托管平台 - 使用精确的正向匹配规则"""
@@ -461,8 +450,7 @@ class Spider(Spider):
                 lambda: self._tryPassMd5(origin, code, html, headers),
                 lambda: self._tryDirectDownload(origin, code, html, headers),
                 lambda: self._tryPageDirectLinks(html, headers),
-                lambda: self._tryDomainFallback(code, headers),
-                lambda: self._tryEmbedPageAnalysis(embed_url, html, headers)
+                lambda: self._tryDomainFallback(code, headers)
             ]
             
             for method in methods:
@@ -589,26 +577,6 @@ class Spider(Spider):
                     return {'parse': 0, 'url': loc, 'header': headers}
             except:
                 continue
-        
-        return None
-
-    def _tryEmbedPageAnalysis(self, embed_url, html, headers):
-        """分析 embed 页面，寻找隐藏的播放信息"""
-        try:
-            # 查找 JavaScript 中的播放信息
-            js_patterns = [
-                r'file\s*:\s*["\']([^"\']+)["\']',
-                r'source\s*:\s*["\']([^"\']+)["\']',
-                r'url\s*:\s*["\']([^"\']+)["\']'
-            ]
-            
-            for pattern in js_patterns:
-                matches = re.findall(pattern, html)
-                for match in matches:
-                    if match and ('http' in match) and any(ext in match.lower() for ext in ['.mp4', '.m3u8']):
-                        return {'parse': 0, 'url': match, 'header': headers}
-        except:
-            pass
         
         return None
 
