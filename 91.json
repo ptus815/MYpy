@@ -1,4 +1,5 @@
 {
+  "spider":"https://raw.githubusercontent.com/FongMi/CatVodSpider/a1324dfd1342958684b44208c6810fd3f7c17717/jar/custom_spider.jar;md5;eaaa2de0f1e4946be155e3130ef4fdf3",
   "sites": [
     {
       "key": "GayCock4U",
@@ -12,6 +13,7 @@
     }
   ]
 }
+
 
 
 
