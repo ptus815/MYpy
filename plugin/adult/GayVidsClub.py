@@ -184,13 +184,18 @@ class Spider(Spider):
             encoded_url = self.e64(f'{0}@@@@{iframe_src}')
             vod['vod_play_url'] = f"直接播放${encoded_url}"
             
-            # 方式2: 使用嗅探路线
+            # 方式2: 使用嗅探路线（基于规则的嗅探，由播放器按hosts/regex识别）
             sniff_urls = []
-            
-            for parser in self.sniff_parsers:
-                sniff_url = f"{parser['url']}{iframe_src}"
-                encoded_sniff_url = self.e64(f'{1}@@@@{sniff_url}')
-                sniff_urls.append(f"{parser['name']}${encoded_sniff_url}")
+            sniff_names = [
+                '火山嗅探',
+                '抖音嗅探',
+                '農民嗅探',
+                '新视觉嗅探',
+                '七新嗅探'
+            ]
+            for name in sniff_names:
+                encoded_sniff_url = self.e64(f'{1}@@@@{iframe_src}')
+                sniff_urls.append(f"{name}${encoded_sniff_url}")
             
             # 组合所有播放方式
             all_play_urls = [vod['vod_play_url']] + sniff_urls
@@ -230,6 +235,7 @@ class Spider(Spider):
                 m3u8_url = None
                 
                 # 方法1：从页面内容中查找m3u8链接
+                
                 m3u8_pattern = r'https://[^"\']*\.m3u8[^"\']*'
                 m3u8_matches = re.findall(m3u8_pattern, content)
                 if m3u8_matches:
