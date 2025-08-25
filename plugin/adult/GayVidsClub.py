@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# by @Claude
+# by @ao
 import json
 import sys
 import re
@@ -46,13 +46,6 @@ class Spider(Spider):
         self.session.proxies.update(self.proxies)
         self.session.headers.update(self.headers)
         
-        # 初始化嗅探解析器配置
-        self.sniff_parsers = [
-            {"name": "王", "url": "http://122.228.84.103:7777/api/?key=4Dk5tdayvY6NZufEMG&url="},
-            {"name": "二", "url": "http://110.42.7.182:880/api/?key=7e84f07dc78fbb3406d64a1ab7d966b3&url="},
-            {"name": "小", "url": "http://43.136.176.188:91/api/?key=4ef232e96172b0bda78d393c695fe7c4&url="},
-            {"name": "帅", "url": "http://pan.qiaoji8.com/tvbox/neibu.php?url="}
-        ]
         pass
 
     def getName(self):
@@ -189,18 +182,15 @@ class Spider(Spider):
             'vod_play_url': ''
         }
         
-        # 构建播放地址 - 支持多种播放方式
+        # 构建播放地址 - 直接提取m3u8
         if iframe_src:
-            # 方式1: 直接播放iframe
-            encoded_url = self.e64(f'{0}@@@@{iframe_src}')
-            vod['vod_play_url'] = f"直接播放${encoded_url}"
-            
-            # 方式2: 单一“嗅探”路线（由播放器依据 rules 自动匹配可用的）
-            sniff_entry = f"嗅探${self.e64(f'{1}@@@@{iframe_src}')}"
-            
-            # 组合所有播放方式（直接播放 + 嗅探）
-            all_play_urls = [vod['vod_play_url'], sniff_entry]
-            vod['vod_play_url'] = '#'.join(all_play_urls)
+            m3u8_url = self.extract_m3u8_from_iframe(iframe_src)
+            if m3u8_url:
+                vod['vod_play_from'] = 'm3u8'
+                # 传递m3u8与所需Referer（embed页）
+                vod['vod_play_url'] = f"播放${self.e64(f'{0}@@@@{m3u8_url}@@@@{iframe_src}')}"
+            else:
+                vod['vod_play_url'] = ''
         
         return {'list': [vod]}
 
@@ -215,57 +205,25 @@ class Spider(Spider):
 
     def playerContent(self, flag, id, vipFlags):
         ids = self.d64(id).split('@@@@')
-        parse_type = int(ids[0])
-        url = ids[1]
-        
-        # 如果是嗅探路线 (parse_type == 1)
-        if parse_type == 1:
-            # 直接返回嗅探URL，让播放器处理
-            return {'parse': 1, 'url': url, 'header': self.headers}
-        
-        # 如果是直接播放iframe (parse_type == 0)
-        else:
-            iframe_url = url
-            
-            # 获取iframe内容
-            try:
-                response = self.session.get(iframe_url, timeout=15)
-                content = response.text
-                
-                # 查找m3u8地址
-                m3u8_url = None
-                
-                # 方法1：从页面内容中查找m3u8链接
-                
-                m3u8_pattern = r'https://[^"\']*\.m3u8[^"\']*'
-                m3u8_matches = re.findall(m3u8_pattern, content)
-                if m3u8_matches:
-                    m3u8_url = m3u8_matches[0]
-                
-                # 方法2：查找stream路径
-                if not m3u8_url:
-                    stream_pattern = r'https://[^"\']*stream[^"\']*master\.m3u8'
-                    stream_matches = re.findall(stream_pattern, content)
-                    if stream_matches:
-                        m3u8_url = stream_matches[0]
-                
-                # 方法3：查找视频ID并构建m3u8地址
-                if not m3u8_url:
-                    video_id_match = re.search(r'embed/([a-zA-Z0-9]+)', iframe_url)
-                    if video_id_match:
-                        video_id = video_id_match.group(1)
-                        # 尝试构建m3u8地址
-                        m3u8_url = f"https://mivalyo.com/stream/{video_id}/master.m3u8"
-                
-                if m3u8_url:
-                    return {'parse': 0, 'url': m3u8_url, 'header': self.headers}
-                else:
-                    # 如果找不到m3u8，返回iframe地址
-                    return {'parse': 1, 'url': iframe_url, 'header': self.headers}
-                    
-            except Exception as e:
-                print(f"获取播放地址失败: {str(e)}")
-                return {'parse': 1, 'url': iframe_url, 'header': self.headers}
+        m3u8_url = ids[1]
+        referer_iframe = ids[2] if len(ids) > 2 else 'https://mivalyo.com/'
+        # 直连m3u8播放，附上截图中所需请求头
+        headers = {
+            'Accept': '*/*',
+            'Accept-Encoding': 'gzip, deflate, br, zstd',
+            'Accept-Language': 'zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2',
+            'Connection': 'keep-alive',
+            'Cookie': 'tsn=11',
+            'Host': 'mivalyo.com',
+            'Referer': referer_iframe,
+            'Sec-Fetch-Dest': 'empty',
+            'Sec-Fetch-Mode': 'cors',
+            'Sec-Fetch-Site': 'same-origin',
+            'Sec-GPC': '1',
+            'TE': 'trailers',
+            'User-Agent': self.headers.get('User-Agent','Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0')
+        }
+        return {'parse': 0, 'url': m3u8_url, 'header': headers}
 
     def localProxy(self, param):
         url = self.d64(param['url'])
@@ -414,3 +372,23 @@ class Spider(Spider):
             return f"{self.getProxyUrl()}&url={self.e64(data)}&type={type}"
         else:
             return data 
+
+    def extract_m3u8_from_iframe(self, iframe_url):
+        try:
+            # iframe on mivalyo.com requires referer sometimes
+            headers = dict(self.headers)
+            headers['Referer'] = 'https://gayvidsclub.com/'
+            r = self.session.get(iframe_url, headers=headers, timeout=15)
+            html = r.text or ''
+            # direct m3u8
+            m = re.search(r'https://[^"\']+\.m3u8[^"\']*', html)
+            if m:
+                return m.group(0)
+            # stream/master.m3u8
+            m = re.search(r'https://[^"\']*stream[^"\']*master\.m3u8', html)
+            if m:
+                return m.group(0)
+            return ''
+        except Exception as e:
+            print(f"iframe解析失败: {e}")
+            return '' 
