@@ -184,21 +184,11 @@ class Spider(Spider):
             encoded_url = self.e64(f'{0}@@@@{iframe_src}')
             vod['vod_play_url'] = f"直接播放${encoded_url}"
             
-            # 方式2: 使用嗅探路线（基于规则的嗅探，由播放器按hosts/regex识别）
-            sniff_urls = []
-            sniff_names = [
-                '火山嗅探',
-                '抖音嗅探',
-                '農民嗅探',
-                '新视觉嗅探',
-                '七新嗅探'
-            ]
-            for name in sniff_names:
-                encoded_sniff_url = self.e64(f'{1}@@@@{iframe_src}')
-                sniff_urls.append(f"{name}${encoded_sniff_url}")
+            # 方式2: 单一“嗅探”路线（由播放器依据 rules 自动匹配可用的）
+            sniff_entry = f"嗅探${self.e64(f'{1}@@@@{iframe_src}')}"
             
-            # 组合所有播放方式
-            all_play_urls = [vod['vod_play_url']] + sniff_urls
+            # 组合所有播放方式（直接播放 + 嗅探）
+            all_play_urls = [vod['vod_play_url'], sniff_entry]
             vod['vod_play_url'] = '#'.join(all_play_urls)
         
         return {'list': [vod]}
