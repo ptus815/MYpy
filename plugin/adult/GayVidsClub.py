@@ -15,9 +15,20 @@ class Spider(Spider):
 
     def init(self, extend=""):
         try:
-            self.proxies = json.loads(extend)
+            self.proxies = json.loads(extend) if extend else {}
         except:
             self.proxies = {}
+        # 支持 ext 传入 {"http":"...","https":"..."} 或 {"proxy": {"http":"...","https":"..."}}
+        if isinstance(self.proxies, dict) and 'proxy' in self.proxies and isinstance(self.proxies['proxy'], dict):
+            self.proxies = self.proxies['proxy']
+        # 统一补全协议前缀
+        fixed = {}
+        for k, v in (self.proxies or {}).items():
+            if isinstance(v, str) and not v.startswith('http'):
+                fixed[k] = f'http://{v}'
+            else:
+                fixed[k] = v
+        self.proxies = fixed
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
