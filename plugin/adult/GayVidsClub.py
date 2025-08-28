@@ -188,12 +188,24 @@ class Spider(Spider):
         m3u8_url = ids[0]
         iframe_url = ids[1] if len(ids) > 1 else ids[0]  # 使用 iframe_url 作为 Referer
         
+        # 关键修复：确保Referer正确设置为iframe_url
         headers = {
             'User-Agent': self.headers['User-Agent'],
-            'Referer': iframe_url,  # 动态设置为 iframe URL
+            'Referer': iframe_url,  # 使用提取的iframe_url作为Referer
             'Accept': '*/*',
-            'Host': urlparse(m3u8_url).netloc if 'm3u8' in m3u8_url else urlparse(iframe_url).netloc
+            'Origin': urlparse(iframe_url).scheme + '://' + urlparse(iframe_url).netloc
         }
+        
+        # 如果是m3u8链接，添加必要的视频头信息
+        if '.m3u8' in m3u8_url:
+            headers.update({
+                'Accept': 'application/x-mpegURL, application/vnd.apple.mpegurl, */*',
+                'Accept-Encoding': 'identity',
+                'Connection': 'keep-alive',
+                'Sec-Fetch-Mode': 'cors',
+                'Sec-Fetch-Site': 'cross-site'
+            })
+        
         return {'parse': 0, 'url': m3u8_url, 'header': headers}
 
     def localProxy(self, param):
