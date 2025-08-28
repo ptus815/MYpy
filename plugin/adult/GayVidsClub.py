@@ -88,11 +88,11 @@ class Spider(Spider):
 
     def extract_m3u8_from_iframe(self, iframe_url):
         """
-        从 iframe 页面提取 .m3u8 链接，优先使用简单的解析，备用 Selenium
+        从 iframe 页面提取 .m3u8 链接，基于截图中的模式
         """
         headers = {
             'User-Agent': self.headers['User-Agent'],
-            'Referer': self.host,
+            'Referer': iframe_url,  # 根据你的要求设置为 iframe URL
             'Accept': '*/*'
         }
         try:
@@ -109,6 +109,16 @@ class Spider(Spider):
                     continue
                 js_code = script.text()
                 
+                # 匹配截图中的 .m3u8 模式
+                m3u8_match = re.search(
+                    r'https://mivalyo\.com/stream/[a-zA-Z0-9-]+/[a-zA-Z0-9-]+/\d+/[a-zA-Z0-9]+/master\.m3u8',
+                    js_code
+                )
+                if m3u8_match:
+                    url = m3u8_match.group(0)
+                    print(f"Found m3u8 via regex: {url}")
+                    return url
+                
                 # 尝试提取 Base64 编码的 .m3u8
                 base64_matches = re.findall(r'atob\("([^"]+)"\)', js_code)
                 for encoded in base64_matches:
@@ -119,43 +129,8 @@ class Spider(Spider):
                             return url
                     except:
                         continue
-                
-                # 简单检查是否直接包含 .m3u8
-                m3u8_match = re.search(r'(https?://[^\s"]+\.m3u8)', js_code)
-                if m3u8_match:
-                    url = m3u8_match.group(1)
-                    print(f"Found m3u8 via regex: {url}")
-                    return url
         except Exception as e:
             print(f"Error parsing iframe: {e}")
-
-        # 备用：使用 Selenium 捕获网络请求
-        try:
-            from selenium import webdriver
-            from selenium.webdriver.chrome.options import Options
-            chrome_options = Options()
-            chrome_options.add_argument("--headless")
-            chrome_options.add_argument("--no-sandbox")
-            chrome_options.add_argument("--disable-dev-shm-usage")
-            chrome_options.add_argument("--disable-gpu")
-            driver = webdriver.Chrome(options=chrome_options)
-            driver.get(iframe_url)
-            time.sleep(5)  # 等待动态加载
-            logs = driver.get_log("performance")
-            for log in logs:
-                try:
-                    network_log = json.loads(log["message"])["message"]
-                    if network_log["method"] == "Network.requestWillBeSent":
-                        url = network_log["params"]["request"]["url"]
-                        if '.m3u8' in url and 'blob' not in url:
-                            print(f"Found m3u8 via Selenium: {url}")
-                            driver.quit()
-                            return url
-                except:
-                    continue
-            driver.quit()
-        except Exception as e:
-            print(f"Selenium failed: {e}")
 
         return None
 
@@ -179,7 +154,7 @@ class Spider(Spider):
             for script in scripts.items():
                 script_text = script.text()
                 if script_text and 'iframe' in script_text and 'src' in script_text:
-                    iframe_match = re.search(r'iframe.*?src=["\'](https?://[^"\']+filemoon\.to[^"\']*)["\']', script_text, re.I)
+                    iframe_match = re.search(r'iframe.*?src=["\'](https?://[^"\']+mivalyo\.com[^"\']*)["\']', script_text, re.I)
                     if iframe_match:
                         iframe_src = iframe_match.group(1)
                         break
@@ -191,10 +166,10 @@ class Spider(Spider):
         play_urls = []
         if m3u8_url:
             play_urls.append(f"播放${self.e64(f'{m3u8_url}@@@@{iframe_src}')}")
-            vod_play_from = 'filemoon'
+            vod_play_from = 'mivalyo'
         else:
             play_urls.append(f"播放${self.e64(f'{iframe_src}@@@@{ids[0]}')}")
-            vod_play_from = 'filemoon'
+            vod_play_from = 'mivalyo'
 
         vod = {
             'vod_name': title,
@@ -217,7 +192,7 @@ class Spider(Spider):
         
         headers = {
             'User-Agent': self.headers['User-Agent'],
-            'Referer': iframe_url,
+            'Referer': iframe_url,  # 根据你的要求设置为 iframe URL
             'Accept': '*/*',
             'Host': urlparse(m3u8_url).netloc if 'm3u8' in m3u8_url else urlparse(iframe_url).netloc
         }
@@ -325,4 +300,3 @@ class Spider(Spider):
         if data and self.proxies:
             return f"{self.getProxyUrl()}&url={self.e64(data)}&type={type}"
         return data
-
