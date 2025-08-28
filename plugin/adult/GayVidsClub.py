@@ -186,7 +186,7 @@ class Spider(Spider):
     def playerContent(self, flag, id, vipFlags):
         ids = self.d64(id).split('@@@@')
         m3u8_url = ids[0]
-        iframe_url = ids[1] if len(ids) > 1 else m3u8_url
+        iframe_url = ids[1] if len(ids) > 1 else ids[0]  # 使用 iframe_url 作为 Referer
         
         headers = {
             'User-Agent': self.headers['User-Agent'],
