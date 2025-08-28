@@ -99,6 +99,10 @@ class Spider(Spider):
             data = self.getpq('/all-gay-porn/')
             vlist = self.getlist(data("article"))
         if not vlist:
+            # 进一步兜底：用极简 headers 再抓一次首页
+            data = self.getpq_simple(self.host)
+            vlist = self.getlist(data("article"))
+        if not vlist:
             # Fallback: 用RSS
             try:
                 rss = self.session.get(f'{self.host}/feed', timeout=15).text
@@ -140,6 +144,9 @@ class Spider(Spider):
         
         data = self.getpq(url)
         vdata = self.getlist(data("article"))
+        if not vdata:
+            data = self.getpq_simple(self.host + url if not url.startswith('http') else url)
+            vdata = self.getlist(data("article"))
         
         result['list'] = vdata
         return result
@@ -347,6 +354,16 @@ class Spider(Spider):
             return pq(response.text)
         except Exception as e:
             print(f"获取页面失败: {str(e)}")
+            return pq("")
+
+    def getpq_simple(self, url):
+        try:
+            r = requests.get(url, headers={'User-Agent': self.headers['User-Agent']}, timeout=15)
+            if r.encoding == 'ISO-8859-1':
+                r.encoding = 'utf-8'
+            return pq(r.text)
+        except Exception as e:
+            print(f"简单获取失败: {e}")
             return pq("")
 
     def m3Proxy(self, url):
