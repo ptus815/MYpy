@@ -9,9 +9,6 @@ from pyquery import PyQuery as pq
 from requests import Session
 import jsbeautifier
 import execjs
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-import time
 import subprocess
 
 class Spider:
@@ -20,9 +17,15 @@ class Spider:
             self.proxies = json.loads(extend) if extend else {}
         except:
             self.proxies = {}
-        if isinstance(self.proxies, dict) and 'proxy' in self.proxies:
+        if isinstance(self.proxies, dict) and 'proxy' in self.proxies and isinstance(self.proxies['proxy'], dict):
             self.proxies = self.proxies['proxy']
-        self.proxies = {k: f'http://{v}' if isinstance(v, str) and not v.startswith('http') else v for k, v in self.proxies.items()}
+        fixed = {}
+        for k, v in (self.proxies or {}).items():
+            if isinstance(v, str) and not v.startswith('http'):
+                fixed[k] = f'http://{v}'
+            else:
+                fixed[k] = v
+        self.proxies = fixed
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -31,6 +34,11 @@ class Spider:
         }
         self.host = "https://gayvidsclub.com"
         self.session = Session()
+        self.headers.update({
+            'origin': self.host, 
+            'referer': f'{self.host}/',
+            'host': 'gayvidsclub.com'
+        })
         self.session.proxies.update(self.proxies)
         self.session.headers.update(self.headers)
 
@@ -47,6 +55,7 @@ class Spider:
         pass
 
     def homeContent(self, filter):
+        result = {}
         cateManual = {
             "最新": "/all-gay-porn/",
             "COAT": "/all-gay-porn/coat/",
@@ -58,8 +67,16 @@ class Spider:
             "STR8BOYS": "/all-gay-porn/str8boys/",
             "G-BOT": "/all-gay-porn/g-bot/"
         }
-        classes = [{'type_name': k, 'type_id': v} for k, v in cateManual.items()]
-        return {'class': classes, 'filters': {}}
+        classes = []
+        filters = {}
+        for k in cateManual:
+            classes.append({
+                'type_name': k,
+                'type_id': cateManual[k]
+            })
+        result['class'] = classes
+        result['filters'] = filters
+        return result
 
     def homeVideoContent(self):
         data = self.getpq()
@@ -75,52 +92,65 @@ class Spider:
                 for it in d('item').items():
                     link = it('link').text().strip()
                     title = it('title').text().strip()
-                    thumb = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', it('description').text() or '', re.I)
-                    vlist.append({
-                        'vod_id': link,
-                        'vod_name': title,
-                        'vod_pic': thumb.group(1) if thumb else '',
-                        'vod_year': '',
-                        'vod_remarks': '',
-                        'style': {'ratio': 1.33, 'type': 'rect'}
-                    }) if link and title else None
+                    thumb = ''
+                    desc = it('description').text()
+                    m = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', desc or '', re.I)
+                    if m:
+                        thumb = m.group(1)
+                    if link and title:
+                        vlist.append({
+                            'vod_id': link,
+                            'vod_name': title,
+                            'vod_pic': thumb,
+                            'vod_year': '',
+                            'vod_remarks': '',
+                            'style': {'ratio': 1.33, 'type': 'rect'}
+                        })
             except Exception as e:
                 print(f'RSS解析失败: {e}')
         return {'list': vlist}
 
     def categoryContent(self, tid, pg, filter, extend):
-        result = {'page': pg, 'pagecount': 9999, 'limit': 90, 'total': 999999}
-        url = tid if pg == 1 else f"{tid}page/{pg}/"
+        vdata = []
+        result = {}
+        result['page'] = pg
+        result['pagecount'] = 9999
+        result['limit'] = 90
+        result['total'] = 999999
+        if pg == 1:
+            url = tid
+        else:
+            url = f"{tid}page/{pg}/"
         data = self.getpq(url)
-        result['list'] = self.getlist(data("article"))
+        vdata = self.getlist(data("article"))
+        result['list'] = vdata
         return result
 
     def extract_m3u8_from_iframe(self, iframe_url):
         """
-        从 iframe 页面提取 .m3u8 链接
-        支持 Base64 解码、JavaScript 执行和 Selenium 捕获
+        从 iframe 页面提取 .m3u8 链接，处理 JavaScript 混淆
         """
-        # 1. 使用 requests 获取 iframe 页面
         headers = {
             'User-Agent': self.headers['User-Agent'],
             'Referer': self.host,
             'Accept': '*/*'
         }
         try:
+            # 获取 iframe 页面
             response = self.session.get(iframe_url, headers=headers, timeout=15)
             if response.status_code != 200:
                 print(f"Failed to fetch iframe: {iframe_url}")
                 return None
             soup = pq(response.text)
             
-            # 2. 提取并格式化 JavaScript
+            # 提取并格式化 JavaScript
             scripts = soup('script')
             for script in scripts.items():
                 if not script.text():
                     continue
                 js_code = jsbeautifier.beautify(script.text())
                 
-                # 3. 尝试提取 Base64 编码的 .m3u8
+                # 1. 尝试提取 Base64 编码的 .m3u8
                 base64_matches = re.findall(r'atob\("([^"]+)"\)', js_code)
                 for encoded in base64_matches:
                     try:
@@ -131,10 +161,23 @@ class Spider:
                     except:
                         continue
                 
-                # 4. 尝试执行 JavaScript
+                # 2. 尝试提取字符串数组中的 .m3u8
+                array_matches = re.findall(r'var\s+\w+\s*=\s*\[(.*?)\]', js_code, re.DOTALL)
+                for array in array_matches:
+                    strings = re.findall(r'"([^"]+)"', array)
+                    for s in strings:
+                        try:
+                            url = b64decode(s).decode('utf-8')
+                            if '.m3u8' in url:
+                                print(f"Found m3u8 via array Base64: {url}")
+                                return url
+                        except:
+                            continue
+                
+                # 3. 尝试执行 JavaScript
                 try:
                     ctx = execjs.compile(js_code)
-                    for func_name in ['getM3U8', 'decode', 'hls_src', 'getHlsUrl']:
+                    for func_name in ['getM3U8', 'decode', 'hls_src', 'getHlsUrl', 'getUrl']:
                         try:
                             result = ctx.call(func_name)
                             if isinstance(result, str) and '.m3u8' in result:
@@ -144,37 +187,24 @@ class Spider:
                             continue
                 except:
                     continue
+            
+            # 4. 检查可能的 API 请求
+            api_matches = re.findall(r'["\'](https?://[^"\']+/api/[^"\']+)["\']', response.text)
+            for api_url in api_matches:
+                try:
+                    api_response = self.session.get(api_url, headers=headers, timeout=10)
+                    if api_response.status_code == 200:
+                        data = api_response.json()
+                        for key in ['url', 'm3u8_url', 'hls_url', 'source']:
+                            if key in data and '.m3u8' in data[key]:
+                                print(f"Found m3u8 via API: {data[key]}")
+                                return data[key]
+                except:
+                    continue
         except Exception as e:
             print(f"Error parsing iframe: {e}")
 
-        # 5. 使用 Selenium 捕获网络请求
-        print(f"Trying Selenium for {iframe_url}")
-        chrome_options = Options()
-        chrome_options.add_argument("--headless")
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument("--disable-gpu")
-        chrome_options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
-        
-        driver = webdriver.Chrome(options=chrome_options)
-        try:
-            driver.get(iframe_url)
-            time.sleep(5)  # 等待动态加载
-            logs = driver.get_log("performance")
-            for log in logs:
-                try:
-                    network_log = json.loads(log["message"])["message"]
-                    if network_log["method"] == "Network.requestWillBeSent":
-                        url = network_log["params"]["request"]["url"]
-                        if '.m3u8' in url and 'blob' not in url:
-                            print(f"Found m3u8 via Selenium: {url}")
-                            return url
-                except:
-                    continue
-        finally:
-            driver.quit()
-
-        # 6. 使用 yt-dlp 作为备用
+        # 5. 使用 yt-dlp 作为备用
         print(f"Trying yt-dlp for {iframe_url}")
         try:
             command = [
@@ -203,22 +233,8 @@ class Spider:
         views_text = data('text:contains("views")').parent().text().strip() or ''
         tags = [tag.text().strip() for tag in data('.entry-tags a, .post-tags a, a[href*="/tag/"]').items() if tag.text().strip()]
         
-        # 提取 iframe src
+        # 提取 iframe src（仅保留一种方法）
         iframe_src = data('iframe').attr('src') or ''
-        if not iframe_src:
-            for attr in ['data-src', 'data-frame', 'data-iframe']:
-                iframe_src = data(f'[{attr}]').attr(attr) or ''
-                if iframe_src:
-                    break
-        if not iframe_src:
-            scripts = data('script')
-            for script in scripts.items():
-                script_text = script.text()
-                if script_text and 'iframe' in script_text and 'src' in script_text:
-                    iframe_match = re.search(r'iframe.*?src=["\'](https?://[^"\']+filemoon\.to[^"\']*)["\']', script_text, re.I)
-                    if iframe_match:
-                        iframe_src = iframe_match.group(1)
-                        break
         if iframe_src and not iframe_src.startswith('http'):
             iframe_src = urljoin(self.host, iframe_src)
 
@@ -283,41 +299,72 @@ class Spider:
         vlist = []
         for i in data.items():
             try:
-                link_elem = i('h3 a, h2 a, h1 a, .entry-title a').eq(0)
+                link_elem = i('h3 a, h2 a, h1 a').eq(0)
+                if not link_elem or len(link_elem) == 0:
+                    link_elem = i('.entry-title a').eq(0)
                 if not link_elem:
                     continue
-                vod_id = link_elem.attr('href').strip()
-                vod_name = link_elem.text().strip()
-                if not vod_id or not vod_name:
+                vod_id = (link_elem.attr('href') or '').strip()
+                if not vod_id:
                     continue
+                vod_name = link_elem.text().strip()
                 
                 img_elem = i('figure img').eq(0)
-                vod_pic = img_elem.attr('src') or img_elem.attr('data-src') or img_elem.attr('data-original') or img_elem.attr('data-thumb') or img_elem.attr('data-lazy-src') or ''
-                if not vod_pic and img_elem.attr('srcset'):
-                    vod_pic = img_elem.attr('srcset').split(',')[0].split(' ')[0]
-                if vod_pic and not vod_pic.startswith('http'):
-                    vod_pic = urljoin(self.host, vod_pic)
+                vod_pic = ''
+                if img_elem:
+                    vod_pic = (img_elem.attr('src') or '').strip()
+                    if not vod_pic:
+                        for attr in ['data-src', 'data-original', 'data-thumb', 'data-lazy-src']:
+                            vod_pic = (img_elem.attr(attr) or '').strip()
+                            if vod_pic:
+                                break
+                    if not vod_pic:
+                        srcset = (img_elem.attr('srcset') or '').strip()
+                        if srcset:
+                            vod_pic = srcset.split(',')[0].split(' ')[0]
+                    if vod_pic and not vod_pic.startswith('http'):
+                        vod_pic = urljoin(self.host, vod_pic)
                 
-                vod_year = next((line.strip() for line in i('figure').text().strip().split('\n') if line.strip() and not line.startswith('▶') and len(line) > 1), '')
-                vod_remarks = i('time, .entry-meta a[href*="/202"], a[href*="/202"]').eq(0).text().strip() or i('time').attr('datetime', '').split('T')[0]
+                figure_text = i('figure').text()
+                category_text = ''
+                if figure_text:
+                    lines = figure_text.strip().split('\n')
+                    for line in lines:
+                        line = line.strip()
+                        if line and not line.startswith('▶') and len(line) > 1:
+                            category_text = line
+                            break
+                vod_year = category_text
                 
-                vlist.append({
-                    'vod_id': vod_id,
-                    'vod_name': vod_name,
-                    'vod_pic': vod_pic,
-                    'vod_year': vod_year,
-                    'vod_remarks': vod_remarks,
-                    'style': {'ratio': 1.33, 'type': 'rect'}
-                })
+                vod_remarks = ''
+                time_elem = i('time, .entry-meta a[href*="/202"], a[href*="/202"]').eq(0)
+                if time_elem:
+                    vod_remarks = (time_elem.text() or '').strip()
+                if not vod_remarks:
+                    t = i('time').attr('datetime')
+                    if t:
+                        vod_remarks = t.strip().split('T')[0]
+                
+                if vod_id and vod_name:
+                    vlist.append({
+                        'vod_id': vod_id,
+                        'vod_name': vod_name,
+                        'vod_pic': vod_pic,
+                        'vod_year': vod_year,
+                        'vod_remarks': vod_remarks,
+                        'style': {'ratio': 1.33, 'type': 'rect'}
+                    })
             except Exception as e:
                 print(f"解析视频信息失败: {e}")
+                continue
         return vlist
 
     def getpq(self, path=''):
         h = '' if path.startswith('http') else self.host
         try:
             response = self.session.get(f'{h}{path}', timeout=15)
-            response.encoding = 'utf-8' if response.encoding == 'ISO-8859-1' else response.encoding
+            if response.encoding == 'ISO-8859-1':
+                response.encoding = 'utf-8'
             return pq(response.text)
         except Exception as e:
             print(f"获取页面失败: {e}")
@@ -358,6 +405,6 @@ class Spider:
             return [500, "text/plain", f"Error: {e}"]
 
     def proxy(self, data, type='img'):
-        if data and self.proxies:
+        if data and len(self.proxies):
             return f"{self.getProxyUrl()}&url={self.e64(data)}&type={type}"
         return data
