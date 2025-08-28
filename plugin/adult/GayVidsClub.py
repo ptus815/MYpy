@@ -469,10 +469,10 @@ class Spider(Spider):
                 if not code.strip():
                     src = s.attr('src') or ''
                     if src and src.startswith('http'):
-                        try{
+                        try:
                             resp = requests.get(src, timeout=8).text
                             code = resp
-                        }catch(Exception):
+                        except Exception:
                             code = ''
                 if code:
                     try:
