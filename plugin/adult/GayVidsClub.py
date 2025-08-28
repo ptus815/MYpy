@@ -4,7 +4,7 @@ import json
 import sys
 import re
 from base64 import b64decode, b64encode
-from urllib.parse import urlparse, urljoin
+from urllib.parse import urlparse, urljoin, quote
 import requests
 from pyquery import PyQuery as pq
 from requests import Session
@@ -164,6 +164,8 @@ class Spider(Spider):
         
         # 获取iframe src
         iframe_src = data('iframe').attr('src')
+        if iframe_src and not iframe_src.startswith('http'):
+            iframe_src = urljoin(self.host, iframe_src)
         
         # 构建详细信息
         content_parts = []
@@ -183,14 +185,20 @@ class Spider(Spider):
         }
         
         # 构建播放地址 - 直接提取m3u8
+        play_urls = []
         if iframe_src:
-            m3u8_url = self.extract_m3u8_from_iframe(iframe_src)
-            if m3u8_url:
+            m3u8_urls = self.extract_m3u8_from_iframe(iframe_src)
+            if m3u8_urls:
                 vod['vod_play_from'] = 'm3u8'
-                # 传递m3u8与所需Referer（embed页）
-                vod['vod_play_url'] = f"播放${self.e64(f'{0}@@@@{m3u8_url}@@@@{iframe_src}')}"
+                for idx, m3u8_url in enumerate(m3u8_urls):
+                    play_urls.append(f"第{idx+1}集${self.e64(f'{0}@@@@{m3u8_url}@@@@{iframe_src}')}")
+                vod['vod_play_url'] = '#'.join(play_urls)
             else:
-                vod['vod_play_url'] = ''
+                # 尝试直接提取视频源
+                video_src = self.extract_video_src(data)
+                if video_src:
+                    vod['vod_play_from'] = 'direct'
+                    vod['vod_play_url'] = f"播放${self.e64(f'1@@@@{video_src}@@@@{ids[0]}')}"
         
         return {'list': [vod]}
 
@@ -205,25 +213,34 @@ class Spider(Spider):
 
     def playerContent(self, flag, id, vipFlags):
         ids = self.d64(id).split('@@@@')
-        m3u8_url = ids[1]
-        referer_iframe = ids[2] if len(ids) > 2 else 'https://mivalyo.com/'
-        # 直连m3u8播放，附上截图中所需请求头
-        headers = {
-            'Accept': '*/*',
-            'Accept-Encoding': 'gzip, deflate, br, zstd',
-            'Accept-Language': 'zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2',
-            'Connection': 'keep-alive',
-            'Cookie': 'tsn=11',
-            'Host': 'mivalyo.com',
-            'Referer': referer_iframe,
-            'Sec-Fetch-Dest': 'empty',
-            'Sec-Fetch-Mode': 'cors',
-            'Sec-Fetch-Site': 'same-origin',
-            'Sec-GPC': '1',
-            'TE': 'trailers',
-            'User-Agent': self.headers.get('User-Agent','Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0')
-        }
-        return {'parse': 0, 'url': m3u8_url, 'header': headers}
+        play_type = ids[0]
+        media_url = ids[1]
+        referer = ids[2] if len(ids) > 2 else 'https://gayvidsclub.com/'
+        
+        if play_type == '0':  # m3u8
+            # 直连m3u8播放，附上所需请求头
+            headers = {
+                'Accept': '*/*',
+                'Accept-Encoding': 'gzip, deflate, br, zstd',
+                'Accept-Language': 'zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2',
+                'Connection': 'keep-alive',
+                'Cookie': 'tsn=11',
+                'Host': urlparse(media_url).netloc,
+                'Referer': referer,
+                'Sec-Fetch-Dest': 'empty',
+                'Sec-Fetch-Mode': 'cors',
+                'Sec-Fetch-Site': 'same-origin',
+                'Sec-GPC': '1',
+                'TE': 'trailers',
+                'User-Agent': self.headers.get('User-Agent','Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0')
+            }
+            return {'parse': 0, 'url': media_url, 'header': headers}
+        else:  # direct video
+            headers = {
+                'Referer': referer,
+                'User-Agent': self.headers.get('User-Agent','Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0')
+            }
+            return {'parse': 0, 'url': media_url, 'header': headers}
 
     def localProxy(self, param):
         url = self.d64(param['url'])
@@ -380,15 +397,79 @@ class Spider(Spider):
             headers['Referer'] = 'https://gayvidsclub.com/'
             r = self.session.get(iframe_url, headers=headers, timeout=15)
             html = r.text or ''
-            # direct m3u8
-            m = re.search(r'https://[^"\']+\.m3u8[^"\']*', html)
-            if m:
-                return m.group(0)
-            # stream/master.m3u8
-            m = re.search(r'https://[^"\']*stream[^"\']*master\.m3u8', html)
-            if m:
-                return m.group(0)
-            return ''
+            
+            # 改进的m3u8提取方法
+            m3u8_urls = []
+            
+            # 方法1: 直接查找m3u8链接
+            m3u8_patterns = [
+                r'(https?://[^\s"\']+\.m3u8[^\s"\']*)',
+                r'src:\s*["\'](https?://[^\s"\']+\.m3u8[^\s"\']*)["\']',
+                r'file:\s*["\'](https?://[^\s"\']+\.m3u8[^\s"\']*)["\']',
+                r'videoUrl:\s*["\'](https?://[^\s"\']+\.m3u8[^\s"\']*)["\']',
+                r'url:\s*["\'](https?://[^\s"\']+\.m3u8[^\s"\']*)["\']'
+            ]
+            
+            for pattern in m3u8_patterns:
+                matches = re.findall(pattern, html, re.IGNORECASE)
+                for match in matches:
+                    if match not in m3u8_urls:
+                        m3u8_urls.append(match)
+            
+            # 方法2: 查找包含m3u8的JavaScript变量
+            js_patterns = [
+                r'var\s+[a-zA-Z_][a-zA-Z0-9_]*\s*=\s*["\'](https?://[^\s"\']+\.m3u8[^\s"\']*)["\']',
+                r'let\s+[a-zA-Z_][a-zA-Z0-9_]*\s*=\s*["\'](https?://[^\s"\']+\.m3u8[^\s"\']*)["\']',
+                r'const\s+[a-zA-Z_][a-zA-Z0-9_]*\s*=\s*["\'](https?://[^\s"\']+\.m3u8[^\s"\']*)["\']'
+            ]
+            
+            for pattern in js_patterns:
+                matches = re.findall(pattern, html, re.IGNORECASE)
+                for match in matches:
+                    if match not in m3u8_urls:
+                        m3u8_urls.append(match)
+            
+            # 方法3: 查找包含"master.m3u8"或"playlist.m3u8"的链接
+            master_patterns = [
+                r'(https?://[^\s"\']*master\.m3u8[^\s"\']*)',
+                r'(https?://[^\s"\']*playlist\.m3u8[^\s"\']*)',
+                r'(https?://[^\s"\']*index\.m3u8[^\s"\']*)'
+            ]
+            
+            for pattern in master_patterns:
+                matches = re.findall(pattern, html, re.IGNORECASE)
+                for match in matches:
+                    if match not in m3u8_urls:
+                        m3u8_urls.append(match)
+            
+            return m3u8_urls
         except Exception as e:
             print(f"iframe解析失败: {e}")
-            return '' 
+            return []
+
+    def extract_video_src(self, data):
+        # 尝试直接从页面提取视频源
+        video_elem = data('video source')
+        if video_elem:
+            src = video_elem.attr('src')
+            if src:
+                return src
+                
+        # 尝试查找JavaScript中的视频源
+        scripts = data('script')
+        for script in scripts.items():
+            script_text = script.text()
+            if script_text:
+                video_patterns = [
+                    r'src:\s*["\'](https?://[^\s"\']+\.mp4[^\s"\']*)["\']',
+                    r'file:\s*["\'](https?://[^\s"\']+\.mp4[^\s"\']*)["\']',
+                    r'videoUrl:\s*["\'](https?://[^\s"\']+\.mp4[^\s"\']*)["\']',
+                    r'url:\s*["\'](https?://[^\s"\']+\.mp4[^\s"\']*)["\']'
+                ]
+                
+                for pattern in video_patterns:
+                    matches = re.findall(pattern, script_text, re.IGNORECASE)
+                    if matches:
+                        return matches[0]
+        
+        return None
