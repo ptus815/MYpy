@@ -24,13 +24,11 @@ class Spider(Spider):
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
             'Accept-Language': 'zh-CN,zh;q=0.8,en-US;q=0.3,en;q=0.2',
-            'Referer': 'https://gayvidsclub.com/',
         }
         self.host = "https://gayvidsclub.com"
         self.session = Session()
         self.session.proxies.update(self.proxies)
         self.session.headers.update(self.headers)
-        self.headers.update({'origin': self.host, 'referer': f'{self.host}/', 'host': 'gayvidsclub.com'})
 
     def getName(self):
         return "GayVidsClub"
@@ -92,13 +90,13 @@ class Spider(Spider):
         """
         headers = {
             'User-Agent': self.headers['User-Agent'],
-            'Referer': iframe_url,  # 根据你的要求设置为 iframe URL
+            'Referer': iframe_url,  # 动态设置为 iframe URL
             'Accept': '*/*'
         }
         try:
             response = self.session.get(iframe_url, headers=headers, timeout=15)
             if response.status_code != 200:
-                print(f"Failed to fetch iframe: {iframe_url}")
+                print(f"Failed to fetch iframe: {iframe_url}, status: {response.status_code}")
                 return None
             soup = pq(response.text)
             
@@ -192,7 +190,7 @@ class Spider(Spider):
         
         headers = {
             'User-Agent': self.headers['User-Agent'],
-            'Referer': iframe_url,  # 根据你的要求设置为 iframe URL
+            'Referer': iframe_url,  # 动态设置为 iframe URL
             'Accept': '*/*',
             'Host': urlparse(m3u8_url).netloc if 'm3u8' in m3u8_url else urlparse(iframe_url).netloc
         }
@@ -300,3 +298,9 @@ class Spider(Spider):
         if data and self.proxies:
             return f"{self.getProxyUrl()}&url={self.e64(data)}&type={type}"
         return data
+
+if __name__ == "__main__":
+    spider = Spider()
+    spider.init()
+    result = spider.detailContent(['https://gayvidsclub.com/all-gay-porn/ryuga-vs-junya-hatsutai-sex/'])
+    print(json.dumps(result, indent=2, ensure_ascii=False))
