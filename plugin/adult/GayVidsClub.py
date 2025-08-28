@@ -11,13 +11,6 @@ from requests import Session
 sys.path.append('..')
 from base.spider import Spider
 
-# 可选：动态 JS 执行支持
-try:
-    import js2py
-    _JS2PY_AVAILABLE = True
-except Exception:
-    _JS2PY_AVAILABLE = False
-
 class Spider(Spider):
 
     def init(self, extend=""):
@@ -99,10 +92,6 @@ class Spider(Spider):
             data = self.getpq('/all-gay-porn/')
             vlist = self.getlist(data("article"))
         if not vlist:
-            # 进一步兜底：用极简 headers 再抓一次首页
-            data = self.getpq_simple(self.host)
-            vlist = self.getlist(data("article"))
-        if not vlist:
             # Fallback: 用RSS
             try:
                 rss = self.session.get(f'{self.host}/feed', timeout=15).text
@@ -144,9 +133,6 @@ class Spider(Spider):
         
         data = self.getpq(url)
         vdata = self.getlist(data("article"))
-        if not vdata:
-            data = self.getpq_simple(self.host + url if not url.startswith('http') else url)
-            vdata = self.getlist(data("article"))
         
         result['list'] = vdata
         return result
@@ -176,37 +162,38 @@ class Spider(Spider):
             if tag_text and tag_text not in tags:
                 tags.append(tag_text)
         
-        # 获取iframe src
+        # 获取iframe src - 修复提取方法
         iframe_src = ""
+        
+        # 方法1: 直接查找iframe标签
         iframe_elem = data('iframe')
         if iframe_elem:
             iframe_src = iframe_elem.attr('src') or ""
+        
+        # 方法2: 查找所有可能的iframe属性
         if not iframe_src:
             for attr in ['data-src', 'data-frame', 'data-iframe']:
                 iframe_src = data(f'[{attr}]').attr(attr) or ""
                 if iframe_src:
                     break
+        
+        # 方法3: 从JavaScript代码中提取iframe URL
         if not iframe_src:
             scripts = data('script')
             for script in scripts.items():
                 script_text = script.text()
                 if script_text and 'iframe' in script_text and 'src' in script_text:
+                    # 尝试从JS中提取iframe URL
                     iframe_match = re.search(r'iframe.*?src=["\'](https?://[^"\']+mivalyo\.com[^"\']*)["\']', script_text, re.IGNORECASE)
                     if iframe_match:
                         iframe_src = iframe_match.group(1)
                         break
+        
+        # 确保URL完整
         if iframe_src and not iframe_src.startswith('http'):
             iframe_src = urljoin(self.host, iframe_src)
         
-        # 解析 iframe 页面，提取真实视频地址
-        play_urls = []
-        if iframe_src:
-            real_list = self.extract_media_from_iframe(iframe_src)
-            for u in real_list:
-                label = '播放' if len(real_list) == 1 else f'播放{real_list.index(u)+1}'
-                # 传递直链与其 referer
-                play_urls.append(f"{label}${self.e64(f'{u}@@@@{iframe_src}')}" )
-        
+        # 构建详细信息
         content_parts = []
         if info_text:
             content_parts.append(f"信息: {info_text}")
@@ -219,9 +206,17 @@ class Spider(Spider):
             'vod_name': title,
             'vod_content': ' | '.join(content_parts) if content_parts else "GayVidsClub视频",
             'vod_tag': ', '.join(tags) if tags else "GayVidsClub",
-            'vod_play_from': 'mivalyo' if play_urls else 'GayVidsClub',
-            'vod_play_url': '#'.join(play_urls)
+            'vod_play_from': 'mivalyo',
+            'vod_play_url': ''
         }
+        
+        # 构建播放地址，直接传递 iframe URL 和详情页 URL
+        play_urls = []
+        if iframe_src:
+            play_urls.append(f"播放${self.e64(f'{iframe_src}@@@@{ids[0]}')}")
+            vod['vod_play_url'] = '#'.join(play_urls)
+        else:
+            print("未找到iframe URL")  # 调试信息
         
         return {'list': [vod]}
 
@@ -235,18 +230,50 @@ class Spider(Spider):
         return {'list': self.getlist(data("article")), 'page': pg}
 
     def playerContent(self, flag, id, vipFlags):
-        # id 携带 直链@@@@referer
-        decoded = self.d64(id)
-        parts = decoded.split('@@@@') if decoded else ['']
-        real_url = parts[0]
-        referer = parts[1] if len(parts) > 1 else 'https://mivalyo.com/'
+        ids = self.d64(id).split('@@@@')
+        
+        if len(ids) >= 2:
+            iframe_url = ids[0]
+            # 详情页作为 Referer
+            referer_url = ids[1]
+        else:
+            # 如果只有一个参数，假设它是 iframe URL
+            iframe_url = ids[0]
+            referer_url = self.host
+        
+        # Step 1: 请求 iframe URL，使用详情页作为 Referer
+        self.headers['Referer'] = referer_url
+        try:
+            iframe_html = requests.get(iframe_url, headers=self.headers, proxies=self.proxies, timeout=10).text
+        except Exception as e:
+            print(f"请求 iframe 失败: {str(e)}")
+            return {'parse': 0, 'url': ''}
+
+        # Step 2: 查找并提取被混淆的 M3U8 URL
+        m3u8_url = ''
+        m3u8_pattern = re.compile(r'"(https?://[^"]+\.m3u8[^"]*)"')
+        match = m3u8_pattern.search(iframe_html)
+        
+        if not match:
+            # 尝试另一种常见的混淆模式，例如直接在 HTML 中
+            m3u8_pattern = re.compile(r'source src="([^"]+\.m3u8)"')
+            match = m3u8_pattern.search(iframe_html)
+        
+        if match:
+            m3u8_url = match.group(1)
+        else:
+            print("未在 iframe 页面中找到有效的 M3U8 URL。")
+            return {'parse': 0, 'url': ''}
+
+        # Step 3: 设置最终请求的正确 Referer
+        # 根据你的截图，请求 m3u8 时 Referer 必须是 iframe 的 URL
         headers = {
             'User-Agent': self.headers['User-Agent'],
-            'Referer': referer,
-            'Origin': re.match(r'https?://[^/]+', referer).group(0) if re.match(r'https?://[^/]+', referer) else 'https://mivalyo.com',
-            'Accept': '*/*'
+            'Referer': iframe_url,
+            'Host': urlparse(m3u8_url).netloc,
         }
-        return {'parse': 0, 'url': real_url, 'header': headers}
+        
+        return {'parse': 0, 'url': m3u8_url, 'header': headers}
 
     def localProxy(self, param):
         url = self.d64(param['url'])
@@ -356,16 +383,6 @@ class Spider(Spider):
             print(f"获取页面失败: {str(e)}")
             return pq("")
 
-    def getpq_simple(self, url):
-        try:
-            r = requests.get(url, headers={'User-Agent': self.headers['User-Agent']}, timeout=15)
-            if r.encoding == 'ISO-8859-1':
-                r.encoding = 'utf-8'
-            return pq(r.text)
-        except Exception as e:
-            print(f"简单获取失败: {e}")
-            return pq("")
-
     def m3Proxy(self, url):
         try:
             ydata = requests.get(url, headers=self.headers, proxies=self.proxies, allow_redirects=False, timeout=10)
@@ -405,145 +422,3 @@ class Spider(Spider):
             return f"{self.getProxyUrl()}&url={self.e64(data)}&type={type}"
         else:
             return data
-
-    # --------------------- 内部辅助：解混淆并提取媒体链接 ---------------------
-    def _js_unescape(self, text):
-        """处理常见的 \xNN、\uNNNN 等编码。"""
-        try:
-            # 处理 \\xNN 和 \\uNNNN
-            def repl(m):
-                seq = m.group(0)
-                try:
-                    return bytes(seq, 'utf-8').decode('unicode_escape')
-                except Exception:
-                    return seq
-            return re.sub(r"\\x[0-9a-fA-F]{2}|\\u[0-9a-fA-F]{4}", repl, text)
-        except Exception:
-            return text
-
-    def _p_a_c_k_e_r_unpack(self, source):
-        """简易的 P.A.C.K.E.R 解包器，处理 eval(function(p,a,c,k,e,d)...)"""
-        try:
-            m = re.search(r"eval\(function\(p,a,c,k,e,d\).*", source, re.S)
-            if not m:
-                return None
-            payload = m.group(0)
-            # 粗暴提取 k 数组
-            k_match = re.search(r"\}\('(.*)',\s*(\d+),\s*(\d+),\s*'(.*)'\.split\('\|'\)\)", payload, re.S)
-            if not k_match:
-                return None
-            p_enc, a_base, c_count, k_list = k_match.groups()
-            a_base = int(a_base)
-            c_count = int(c_count)
-            try:
-                p_text = bytes(p_enc, 'utf-8').decode('unicode_escape')
-            except Exception:
-                p_text = p_enc
-            k_array = k_list.split('|')
-            # 基于字典替换
-            def baseN(num, b):
-                digits = "0123456789abcdefghijklmnopqrstuvwxyz"
-                if num == 0:
-                    return '0'
-                res = ''
-                while num:
-                    num, rem = divmod(num, b)
-                    res = digits[rem] + res
-                return res
-            for i in range(c_count-1, -1, -1):
-                key = baseN(i, a_base)
-                if i < len(k_array) and k_array[i]:
-                    p_text = re.sub(r"\b" + re.escape(key) + r"\b", k_array[i], p_text)
-            return self._js_unescape(p_text)
-        except Exception as e:
-            print(f"JS解包失败: {e}")
-            return None
-
-    def _extract_with_js_engine(self, html):
-        """使用 js2py 执行脚本，拦截 jwplayer.setup 等拿 sources。"""
-        if not _JS2PY_AVAILABLE:
-            return []
-        try:
-            ctx = js2py.EvalJs()
-            ctx.execute("var window = {}; var document = {}; var navigator = {};")
-            # atob/escape/unescape polyfill
-            ctx.execute("""
-            function atob(i){var b=Buffer?Buffer.from(i,'base64').toString('binary'):String(java.util.Base64.getDecoder().decode(i));return b}
-            function btoa(i){return i}
-            """)
-            captured = []
-            # 模拟 jwplayer
-            ctx.captured = captured
-            ctx.execute("""
-            function jwplayer(){
-              return { setup: function(cfg){ if(cfg && cfg.sources){ captured.push(JSON.stringify(cfg.sources)); } return {}; } };
-            }
-            """)
-            # 执行所有内联脚本
-            d = pq(html)
-            for s in d('script').items():
-                code = s.text() or ''
-                if not code.strip():
-                    src = s.attr('src') or ''
-                    if src and src.startswith('http'):
-                        try:
-                            resp = requests.get(src, timeout=8).text
-                            code = resp
-                        except Exception:
-                            code = ''
-                if code:
-                    try:
-                        ctx.execute(code)
-                    except Exception:
-                        continue
-            urls = []
-            for item in list(ctx.captured):
-                try:
-                    arr = json.loads(item)
-                    for it in arr:
-                        u = it.get('file') or ''
-                        if u and ('.m3u8' in u or '.mp4' in u):
-                            if u not in urls:
-                                urls.append(u)
-                except Exception:
-                    continue
-            return urls
-        except Exception as e:
-            print(f"js2py 执行失败: {e}")
-            return []
-
-    def extract_media_from_iframe(self, iframe_url):
-        """请求 iframe 页面，解混淆 JS，返回媒体直链列表"""
-        try:
-            headers = {
-                'User-Agent': self.headers['User-Agent'],
-                'Accept': '*/*',
-                'Referer': iframe_url
-            }
-            html = self.session.get(iframe_url, headers=headers, timeout=15).text
-        except Exception as e:
-            print(f"获取 iframe 页面失败: {e}")
-            return []
-        media_urls = []
-        # 先直接搜 .m3u8/.mp4
-        for pat in [r'https?://[^"\'\s>]+?\.m3u8[^"\'\s>]*', r'https?://[^"\'\s>]+?\.mp4[^"\'\s>]*']:
-            for u in re.findall(pat, html):
-                if u not in media_urls:
-                    media_urls.append(u)
-        if media_urls:
-            return media_urls
-        # 解 P.A.C.K.E.R
-        unpacked = self._p_a_c_k_e_r_unpack(html)
-        if unpacked:
-            for pat in [r'https?://[^"\'\s>]+?\.m3u8[^"\'\s>]*', r'https?://[^"\'\s>]+?\.mp4[^"\'\s>]*']:
-                for u in re.findall(pat, unpacked):
-                    if u not in media_urls:
-                        media_urls.append(u)
-            if media_urls:
-                return media_urls
-        # 动态执行（可选）
-        dyn = self._extract_with_js_engine(html)
-        for u in dyn:
-            if u not in media_urls:
-                media_urls.append(u)
-        return media_urls
