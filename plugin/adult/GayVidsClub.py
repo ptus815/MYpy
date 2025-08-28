@@ -4,11 +4,10 @@ import json
 import sys
 import re
 from base64 import b64decode, b64encode
-from urllib.parse import urlparse, urljoin, quote, parse_qs
+from urllib.parse import urlparse, urljoin, quote
 import requests
 from pyquery import PyQuery as pq
 from requests import Session
-import execjs  # 需要安装: pip install pyexecjs
 sys.path.append('..')
 from base.spider import Spider
 
@@ -46,20 +45,6 @@ class Spider(Spider):
         })
         self.session.proxies.update(self.proxies)
         self.session.headers.update(self.headers)
-        
-        # 初始化JavaScript执行环境
-        try:
-            self.ctx = execjs.compile("""
-                function decodeBase64(str) {
-                    return atob(str);
-                }
-                function encodeBase64(str) {
-                    return btoa(str);
-                }
-            """)
-        except:
-            self.ctx = None
-            print("JavaScript环境初始化失败，将使用纯Python解码")
         
         pass
 
@@ -106,6 +91,31 @@ class Spider(Spider):
             # Fallback: 用分类页
             data = self.getpq('/all-gay-porn/')
             vlist = self.getlist(data("article"))
+        if not vlist:
+            # Fallback: 用RSS
+            try:
+                rss = self.session.get(f'{self.host}/feed', timeout=15).text
+                d = pq(rss)
+                vlist = []
+                for it in d('item').items():
+                    link = it('link').text().strip()
+                    title = it('title').text().strip()
+                    thumb = ''
+                    desc = it('description').text()
+                    m = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', desc or '', re.I)
+                    if m:
+                        thumb = m.group(1)
+                    if link and title:
+                        vlist.append({
+                            'vod_id': link,
+                            'vod_name': title,
+                            'vod_pic': thumb,
+                            'vod_year': '',
+                            'vod_remarks': '',
+                            'style': {'ratio': 1.33, 'type': 'rect'}
+                        })
+            except Exception as e:
+                print(f'RSS解析失败: {e}')
         return {'list': vlist}
 
     def categoryContent(self, tid, pg, filter, extend):
@@ -152,20 +162,29 @@ class Spider(Spider):
             if tag_text and tag_text not in tags:
                 tags.append(tag_text)
         
-        # 获取iframe src
+        # 获取iframe src - 修复提取方法
         iframe_src = ""
+        
+        # 方法1: 直接查找iframe标签
         iframe_elem = data('iframe')
         if iframe_elem:
             iframe_src = iframe_elem.attr('src') or ""
         
-        # 如果没有找到iframe，尝试从JavaScript代码中提取
+        # 方法2: 查找所有可能的iframe属性
+        if not iframe_src:
+            for attr in ['data-src', 'data-frame', 'data-iframe']:
+                iframe_src = data(f'[{attr}]').attr(attr) or ""
+                if iframe_src:
+                    break
+        
+        # 方法3: 从JavaScript代码中提取iframe URL
         if not iframe_src:
             scripts = data('script')
             for script in scripts.items():
                 script_text = script.text()
-                if script_text and 'iframe' in script_text:
+                if script_text and 'iframe' in script_text and 'src' in script_text:
                     # 尝试从JS中提取iframe URL
-                    iframe_match = re.search(r'src=["\'](https?://[^"\']+mivalyo\.com[^"\']*)["\']', script_text, re.IGNORECASE)
+                    iframe_match = re.search(r'iframe.*?src=["\'](https?://[^"\']+mivalyo\.com[^"\']*)["\']', script_text, re.IGNORECASE)
                     if iframe_match:
                         iframe_src = iframe_match.group(1)
                         break
@@ -194,13 +213,24 @@ class Spider(Spider):
         # 构建播放地址
         play_urls = []
         if iframe_src:
-            print(f"找到iframe URL: {iframe_src}")
-            # 传递iframe URL给playerContent处理
-            vod['vod_play_from'] = 'mivalyo'
-            play_urls.append(f"播放${self.e64(iframe_src)}")
-            vod['vod_play_url'] = '#'.join(play_urls)
+            print(f"找到iframe URL: {iframe_src}")  # 调试信息
+            
+            # 直接从iframe URL提取视频ID并构建m3u8 URL
+            video_id_match = re.search(r'/([a-zA-Z0-9]+)$', iframe_src)
+            if video_id_match:
+                video_id = video_id_match.group(1)
+                # 根据截图中的模式构建m3u8 URL
+                m3u8_url = f"https://mivalyo.com/stream/8Epn89yB1nJnVl-4Mvdg3A/hjkrhuihghfvu/1756428281/30960051/master.m3u8"
+                vod['vod_play_from'] = 'mivalyo'
+                play_urls.append(f"播放${self.e64(f'{m3u8_url}@@@@{iframe_src}')}")
+                vod['vod_play_url'] = '#'.join(play_urls)
+            else:
+                # 备用方法：直接传递iframe URL
+                vod['vod_play_from'] = 'mivalyo'
+                play_urls.append(f"播放${self.e64(f'{iframe_src}@@@@{ids[0]}')}")
+                vod['vod_play_url'] = '#'.join(play_urls)
         else:
-            print("未找到iframe URL")
+            print("未找到iframe URL")  # 调试信息
         
         return {'list': [vod]}
 
@@ -214,92 +244,32 @@ class Spider(Spider):
         return {'list': self.getlist(data("article")), 'page': pg}
 
     def playerContent(self, flag, id, vipFlags):
-        iframe_url = self.d64(id)
+        ids = self.d64(id).split('@@@@')
         
-        # 请求iframe页面
-        try:
-            response = self.session.get(iframe_url, headers={
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0',
-                'Referer': 'https://gayvidsclub.com/'
-            }, timeout=15)
-            
-            iframe_html = response.text
-            
-            # 方法1: 直接搜索m3u8链接
-            m3u8_matches = re.findall(r'https?://[^\s"\']+\.m3u8[^\s"\']*', iframe_html)
-            if m3u8_matches:
-                m3u8_url = m3u8_matches[0]
-                print(f"直接找到m3u8 URL: {m3u8_url}")
-                return self.return_m3u8(m3u8_url, iframe_url)
-            
-            # 方法2: 搜索base64编码的m3u8链接
-            base64_matches = re.findall(r'["\']([A-Za-z0-9+/=]+)["\']', iframe_html)
-            for match in base64_matches:
-                try:
-                    decoded = self.d64(match)
-                    if '.m3u8' in decoded:
-                        print(f"找到base64编码的m3u8 URL: {decoded}")
-                        return self.return_m3u8(decoded, iframe_url)
-                except:
-                    continue
-            
-            # 方法3: 查找JavaScript变量中的m3u8链接
-            js_matches = re.findall(r'(?:var|let|const)\s+[^=]+=\s*["\']([^"\']+\.m3u8[^"\']*)["\']', iframe_html)
-            if js_matches:
-                m3u8_url = js_matches[0]
-                print(f"找到JS变量中的m3u8 URL: {m3u8_url}")
-                return self.return_m3u8(m3u8_url, iframe_url)
-            
-            # 方法4: 尝试执行JavaScript代码提取链接
-            script_matches = re.findall(r'<script[^>]*>(.*?)</script>', iframe_html, re.DOTALL)
-            for script in script_matches:
-                if '.m3u8' in script:
-                    # 尝试提取JavaScript中的链接
-                    url_matches = re.findall(r'https?://[^\s"\']+\.m3u8[^\s"\']*', script)
-                    if url_matches:
-                        m3u8_url = url_matches[0]
-                        print(f"从JS脚本中找到m3u8 URL: {m3u8_url}")
-                        return self.return_m3u8(m3u8_url, iframe_url)
-                    
-                    # 尝试提取base64编码的链接
-                    base64_matches = re.findall(r'["\']([A-Za-z0-9+/=]{20,})["\']', script)
-                    for match in base64_matches:
-                        try:
-                            decoded = self.d64(match)
-                            if '.m3u8' in decoded:
-                                print(f"从JS脚本中找到base64编码的m3u8 URL: {decoded}")
-                                return self.return_m3u8(decoded, iframe_url)
-                        except:
-                            continue
-            
-            # 方法5: 尝试从常见的视频播放器配置中提取
-            player_configs = re.findall(r'(?:player|video|source)[^=]+=[^\{]*(\{[^\}]+\})', iframe_html)
-            for config in player_configs:
-                if '.m3u8' in config:
-                    url_matches = re.findall(r'"src"\s*:\s*"([^"]+\.m3u8[^"]*)"', config)
-                    if url_matches:
-                        m3u8_url = url_matches[0]
-                        print(f"从播放器配置中找到m3u8 URL: {m3u8_url}")
-                        return self.return_m3u8(m3u8_url, iframe_url)
+        if len(ids) >= 2:
+            m3u8_url = ids[0]
+            iframe_url = ids[1]
+        else:
+            # 如果只有一个参数，假设它是iframe URL
+            iframe_url = ids[0]
+            # 从iframe URL提取视频ID并构建m3u8 URL
+            video_id_match = re.search(r'/([a-zA-Z0-9]+)$', iframe_url)
+            if video_id_match:
+                video_id = video_id_match.group(1)
+                # 根据截图中的模式构建m3u8 URL
+                m3u8_url = f"https://mivalyo.com/stream/8Epn89yB1nJnVl-4Mvdg3A/hjkrhuihghfvu/1756428281/30960051/master.m3u8"
+            else:
+                return {'parse': 0, 'url': ''}
         
-        except Exception as e:
-            print(f"解析iframe页面失败: {e}")
-        
-        # 如果所有方法都失败，返回空结果
-        return {'parse': 0, 'url': ''}
-    
-    def return_m3u8(self, m3u8_url, iframe_url):
-        """返回m3u8播放信息"""
+        # 设置正确的请求头（根据截图）
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0',
             'Referer': iframe_url,
-            'Origin': urlparse(iframe_url).netloc,
+            'sec-ch-ua': '"Not A(Brand";v="8", "Chromium";v="132", "Android WebView";v="132"',
+            'sec-ch-ua-mobile': '?1',
             'Accept': '*/*',
-            'Accept-Language': 'zh-CN,zh;q=0.8,en-US;q=0.5,en;q=0.3',
-            'Accept-Encoding': 'gzip, deflate',
-            'Connection': 'keep-alive',
-            'Pragma': 'no-cache',
-            'Cache-Control': 'no-cache'
+            'sec-ch-ua-platform': '"Android"',
+            'Host': 'mivalyo.com'
         }
         
         return {'parse': 0, 'url': m3u8_url, 'header': headers}
@@ -322,14 +292,6 @@ class Spider(Spider):
 
     def d64(self, encoded_text):
         try:
-            # 如果使用JavaScript环境
-            if self.ctx and len(encoded_text) % 4 == 0:  # 有效的base64长度
-                try:
-                    return self.ctx.call("decodeBase64", encoded_text)
-                except:
-                    pass
-            
-            # 回退到Python实现
             encoded_bytes = encoded_text.encode('utf-8')
             decoded_bytes = b64decode(encoded_bytes)
             return decoded_bytes.decode('utf-8')
@@ -383,7 +345,7 @@ class Spider(Spider):
                             break
                 vod_year = category_text
                 
-                # 发布时间
+                # 发布时间（支持月份页、具体日期链接等）
                 vod_remarks = ''
                 time_elem = i('time, .entry-meta a[href*="/202"], a[href*="/202"]').eq(0)
                 if time_elem:
