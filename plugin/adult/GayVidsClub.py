@@ -213,10 +213,11 @@ class Spider(Spider):
         # 构建播放地址，直接传递 iframe URL 和详情页 URL
         play_urls = []
         if iframe_src:
+            # 传递 iframe URL 和详情页 URL (ids[0])
             play_urls.append(f"播放${self.e64(f'{iframe_src}@@@@{ids[0]}')}")
             vod['vod_play_url'] = '#'.join(play_urls)
         else:
-            print("未找到iframe URL")  # 调试信息
+            print("未找到iframe URL")
         
         return {'list': [vod]}
 
@@ -230,16 +231,10 @@ class Spider(Spider):
         return {'list': self.getlist(data("article")), 'page': pg}
 
     def playerContent(self, flag, id, vipFlags):
+        # 解码 Base64 字符串，获取 iframe URL 和视频详情页 URL
         ids = self.d64(id).split('@@@@')
-        
-        if len(ids) >= 2:
-            iframe_url = ids[0]
-            # 详情页作为 Referer
-            referer_url = ids[1]
-        else:
-            # 如果只有一个参数，假设它是 iframe URL
-            iframe_url = ids[0]
-            referer_url = self.host
+        iframe_url = ids[0]
+        referer_url = ids[1]
         
         # Step 1: 请求 iframe URL，使用详情页作为 Referer
         self.headers['Referer'] = referer_url
@@ -250,14 +245,10 @@ class Spider(Spider):
             return {'parse': 0, 'url': ''}
 
         # Step 2: 查找并提取被混淆的 M3U8 URL
+        # 根据截图中的代码，视频链接在 JavaScript 中，且通常包含 `.m3u8`
         m3u8_url = ''
         m3u8_pattern = re.compile(r'"(https?://[^"]+\.m3u8[^"]*)"')
         match = m3u8_pattern.search(iframe_html)
-        
-        if not match:
-            # 尝试另一种常见的混淆模式，例如直接在 HTML 中
-            m3u8_pattern = re.compile(r'source src="([^"]+\.m3u8)"')
-            match = m3u8_pattern.search(iframe_html)
         
         if match:
             m3u8_url = match.group(1)
@@ -266,7 +257,6 @@ class Spider(Spider):
             return {'parse': 0, 'url': ''}
 
         # Step 3: 设置最终请求的正确 Referer
-        # 根据你的截图，请求 m3u8 时 Referer 必须是 iframe 的 URL
         headers = {
             'User-Agent': self.headers['User-Agent'],
             'Referer': iframe_url,
