@@ -11,9 +11,9 @@ import requests
 from pyquery import PyQuery as pq
 sys.path.append('..')
 from base.spider import Spider
-class Spider(Spider):
 
-def init(self, extend=""):
+class Spider(Spider):
+ def init(self, extend=""):
     try:
         self.extend = json.loads(extend) if extend else {}
     except:
@@ -233,7 +233,7 @@ def playerContent(self, flag, id, vipFlags):
                 # 备选：有时JS里写成 $.get('/pass_md5/....'
                 m_pass = re.search(r"/pass_md5/[^'\"\s)]+", text)
             if not m_pass:
-                # 无法找到 pass_md5，回退到原始 iframe url
+                
                 return {'parse': 1, 'url': url, 'header': headers}
 
             pass_md5_url = m_pass.group(0)
@@ -290,16 +290,16 @@ def playerContent(self, flag, id, vipFlags):
             }
             r2 = self.session.get(final_url, headers=video_headers, stream=True, allow_redirects=True, timeout=30)
 
-            # 如果响应看起来像视频或 mp4，则返回解析好的 final_url（parse:0）
+           
             ct = (r2.headers.get('content-type') or '').lower()
             final_requested_url = r2.url
             if 'video' in ct or final_requested_url.endswith('.mp4') or '.mp4' in final_requested_url:
                 return {'parse': 0, 'url': final_url, 'header': video_headers}
-            # 如果是 m3u8，仍当已解析成功，返回 final_url
+        
             if 'mpegurl' in ct or '.m3u8' in final_requested_url:
                 return {'parse': 0, 'url': final_url, 'header': video_headers}
 
-            # 其他情况，也返回构造的 final_url 供上层再试
+        
             return {'parse': 0, 'url': final_url, 'header': video_headers}
         except Exception as e:
             try:
