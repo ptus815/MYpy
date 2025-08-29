@@ -128,7 +128,7 @@ class Spider(Spider):
             resp = self.session.get(url, timeout=30)
             resp.raise_for_status()
             doc = pq(resp.text)
-            articles = doc('article')
+            articles = doc('div.elementor-widget-container article.elementor-post')
             vlist = self.getlist(articles)
             result['list'] = vlist
         except Exception as e:
@@ -181,32 +181,30 @@ class Spider(Spider):
             resp = self.session.get(url, params={'s': key}, timeout=30)
             resp.raise_for_status()
             doc = pq(resp.text)
-            articles = doc('article')
+            articles = doc('div.elementor-widget-container article.elementor-post')
             vlist = self.getlist(articles)
             return {'list': vlist, 'page': pg, 'pagecount': 9999, 'limit': 90, 'total': 999999}
         except Exception as e:
             self.log(f"搜索失败: {str(e)}")
             return {'list': []}
 
+    
     def get_diso_video(self, iframe_url):
         """
-        从 d-s.io 或 d-iso iframe 链接获取真实视频流地址。
-        XHR 请求带 iframe URL 作为 Referer。
+        获取 d-s.io/d-iso 托管的视频真实流地址
         """
         headers = {
             'User-Agent': self.headers['User-Agent'],
-            'Referer': iframe_url,  # 使用 iframe 页面地址作为 Referer
+            'Referer': iframe_url,
             'Accept': '*/*',
             'X-Requested-With': 'XMLHttpRequest'
         }
 
         try:
-            # 请求 iframe 页面
             resp = self.session.get(iframe_url, headers=headers, timeout=30)
             resp.raise_for_status()
             html = resp.text
 
-            # 匹配 hash 和 token
             match = re.search(r'/dood\?op=watch&hash=([^&]+)&token=([^&]+)', html)
             if match:
                 hash_val, token_val = match.groups()
@@ -214,31 +212,23 @@ class Spider(Spider):
                 dood_resp = self.session.get(dood_url, headers=headers, timeout=30)
                 dood_resp.raise_for_status()
                 video_url = dood_resp.text.strip()
-                if video_url and (video_url.endswith(".m3u8") or video_url.endswith(".mp4")):
+                if video_url.endswith('.m3u8') or video_url.endswith('.mp4'):
                     return {'parse': 0, 'url': video_url, 'header': headers}
-
-            # fallback 返回 iframe 原始链接
-            return {'parse': 1, 'url': iframe_url, 'header': headers}
-
         except Exception as e:
-            self.log(f"获取 d-iso 视频失败: {str(e)}")
-            return {'parse': 1, 'url': iframe_url, 'header': headers}
+            self.log(f"获取 d-s.io 视频失败: {str(e)}")
+
+        return {'parse': 1, 'url': iframe_url, 'header': headers}
 
     def playerContent(self, flag, id, vipFlags):
-        """
-        支持 iframe XHR 嗅探：
-        1. 如果 Push 解析失败，尝试从 iframe src 获取真实视频链接。
-        2. 支持 mp4 / m3u8 自动解析。
-        """
         url = self.d64(id)
 
         if 'd-s.io' in url or 'd-iso' in url:
             return self.get_diso_video(url)
 
-        # 非托管平台视频直接返回
         headers = {
             'User-Agent': self.headers['User-Agent'],
             'Referer': self.host,
-            'Accept': '*/*'
+            'Accept': '*/*',
+            'X-Requested-With': 'XMLHttpRequest'
         }
         return {'parse': 1, 'url': url, 'header': headers}
