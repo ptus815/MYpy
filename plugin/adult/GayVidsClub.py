@@ -69,11 +69,17 @@ class Spider(Spider):
                 vod_pic = img_elem.attr('src') or img_elem.attr('data-src') or img_elem.attr('data-original') or ''
                 if vod_pic and not vod_pic.startswith('http'):
                     vod_pic = urljoin(self.host, vod_pic)
+
+                # 日期信息
+                vod_year = i('time').attr('datetime') or ''
+                if vod_year and len(vod_year) >= 4:
+                    vod_year = vod_year[:4]
+
                 vlist.append({
                     'vod_id': b64encode(vod_url.encode('utf-8')).decode('utf-8'),
                     'vod_name': vod_name,
                     'vod_pic': vod_pic,
-                    'vod_year': '',
+                    'vod_year': vod_year,
                     'vod_remarks': '',
                     'style': {'ratio': 1.33, 'type': 'rect'}
                 })
@@ -100,12 +106,14 @@ class Spider(Spider):
             try:
                 rss = self.session.get(f'{self.host}/feed', timeout=15).text
                 d = pq(rss)
-                vlist = [{'vod_id': b64encode(it('link').text().strip().encode('utf-8')).decode('utf-8'),
-                          'vod_name': it('title').text().strip(),
-                          'vod_pic': re.search(r'<img[^>]+src=["\']([^"\']+)["\']', it('description').text() or '', re.I).group(1) if re.search(r'<img[^>]+src=["\']([^"\']+)["\']', it('description').text() or '', re.I) else '',
-                          'vod_year': '',
-                          'vod_remarks': '',
-                          'style': {'ratio': 1.33, 'type': 'rect'}} for it in d('item').items() if it('link').text().strip() and it('title').text().strip()]
+                vlist = [{
+                    'vod_id': b64encode(it('link').text().strip().encode('utf-8')).decode('utf-8'),
+                    'vod_name': it('title').text().strip(),
+                    'vod_pic': re.search(r'<img[^>]+src=["\']([^"\']+)["\']', it('description').text() or '', re.I).group(1) if re.search(r'<img[^>]+src=["\']([^"\']+)["\']', it('description').text() or '', re.I) else '',
+                    'vod_year': '',
+                    'vod_remarks': '',
+                    'style': {'ratio': 1.33, 'type': 'rect'}
+                } for it in d('item').items() if it('link').text().strip() and it('title').text().strip()]
             except Exception as e:
                 print(f'RSS解析失败: {e}')
         return {'class': classes, 'filters': {}, 'list': vlist}
@@ -126,6 +134,13 @@ class Spider(Spider):
         url = b64decode(ids[0]).decode('utf-8')
         data = self.getpq(url)
         title = data('h1').text().strip() or '无标题'
+
+        # 日期和简介
+        pub_date = data('time').attr('datetime') or ''
+        if pub_date:
+            pub_date = pub_date.split('T')[0]
+        desc = data('.entry-content p').text().strip() or ''
+
         iframe_src = data('iframe').attr('src') or ''
         if not iframe_src:
             for attr in ['data-src', 'data-frame', 'data-iframe']:
@@ -137,11 +152,11 @@ class Spider(Spider):
         if not iframe_src.startswith('http'):
             iframe_src = urljoin(self.host, iframe_src)
 
-        # 使用 Push Spider 作为播放线路
         vod_play_url = b64encode(iframe_src.encode('utf-8')).decode('utf-8')
         vod = {
             'vod_name': title,
-            'vod_tag': '',
+            'vod_year': pub_date[:4] if pub_date else '',
+            'vod_content': desc,
             'vod_play_from': 'Push',
             'vod_play_url': f'播放${vod_play_url}'
         }
