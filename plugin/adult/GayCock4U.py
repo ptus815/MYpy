@@ -197,32 +197,60 @@ class Spider(Spider):
             self.log(f"搜索失败: {str(e)}")
             return {'list': []}
 
-    def playerContent(self, flag, id, vipFlags):
-        url = self.d64(id)
-        headers = {
-            'User-Agent': self.headers['User-Agent'],
-            'Referer': self.host,
-            'Accept': 'video/*,*/*;q=0.9',
-        }
+def playerContent(self, flag, id, vipFlags):
+    url = self.d64(id)
+    headers = {
+        'User-Agent': self.headers['User-Agent'],
+        'Referer': self.host,
+        'Accept': 'video/*,*/*;q=0.9',
+    }
 
+    
+    if 'd-s.io' in url:
+        try:
+            
+            resp = self.session.get(url, headers=headers, timeout=30)
+            resp.raise_for_status()
+
+            
+            match = re.search(r'<video.*?src="([^"]*)"', resp.text)
+            if match:
+                video_url = match.group(1).replace('&amp;', '&')  # 清理 URL 中的转义符
+                return {'parse': 0, 'url': video_url, 'header': headers}
+
+            
+            api_url = self.getApiUrlFromIframe(url)  # 使用 helper 方法生成 API 请求 URL
+            if api_url:
+                resp_api = self.session.get(api_url, headers=headers, timeout=30)
+                resp_api.raise_for_status()
+                
+             
+                video_data = resp_api.json()
+                video_url = video_data.get('video_url', '')
+                if video_url:
+                    return {'parse': 0, 'url': video_url, 'header': headers}
+
+        except Exception as e:
+            self.log(f"Push 解析失败，错误信息: {str(e)}")
+
+
+    return {'parse': 1, 'url': url, 'header': headers}
+
+def getApiUrlFromIframe(self, iframe_url):
+  
+    api_base = "https://d-s.io/dood?op=watch"
+  
+    hash_token = self.extractHashTokenFromIframe(iframe_url)
+    if hash_token:
+        api_url = f"{api_base}&hash={hash_token['hash']}&token={hash_token['token']}&embed=1"
+        return api_url
+    return None
+
+def extractHashTokenFromIframe(self, iframe_url):
    
-        if 'd-s.io' in url:
-            try:
-                resp = self.session.get(url, headers=headers, timeout=30)
-                resp.raise_for_status()
-                match = re.search(r'<video.*?src="([^"]*)"', resp.text)
-                if match:
-                    video_url = match.group(1).replace('&amp;', '&')
-                    return {'parse': 0, 'url': video_url, 'header': headers}
-                else:
-                 
-                    api_url = f"https://d-s.io/dood?op=watch&hash=223543660-185-71-1756449288-13317439475d9c23cf5f058dc2a980e1&token=pvmn8l25ruqv44owkambhemu&embed=1&ref2={url}"
-                    resp_api = self.session.get(api_url, headers=headers, timeout=30)
-                    resp_api.raise_for_status()
-                    video_data = resp_api.json()
-                    video_url = video_data.get('video_url', '')
-                    return {'parse': 0, 'url': video_url, 'header': headers}
-            except Exception:
-                return {'parse': 1, 'url': url, 'header': headers}
+    pattern = r"hash=([a-zA-Z0-9]+)&token=([a-zA-Z0-9]+)"
+    match = re.search(pattern, iframe_url)
+    if match:
+        return {'hash': match.group(1), 'token': match.group(2)}
+    return None
 
-        return {'parse': 1, 'url': url, 'header': headers}
