@@ -84,13 +84,13 @@ class Spider(Spider):
         result['list'] = self.getlist(data("article"))
         return result
 
-    def extract_m3u8_from_iframe(self, iframe_url):
+    def extract_m3u8_from_iframe(self, iframe_url, referer_url):
         """
         从 iframe 页面提取 .m3u8 链接，基于截图中的模式
         """
         headers = {
             'User-Agent': self.headers['User-Agent'],
-            'Referer': iframe_url,  # 动态设置为 iframe URL
+            'Referer': referer_url,  # 动态设置为父页面 Referer
             'Accept': '*/*'
         }
         try:
@@ -159,14 +159,15 @@ class Spider(Spider):
         if iframe_src and not iframe_src.startswith('http'):
             iframe_src = urljoin(self.host, iframe_src)
 
-        # 提取 .m3u8 链接
-        m3u8_url = self.extract_m3u8_from_iframe(iframe_src) if iframe_src else None
+        # 提取 .m3u8 链接，传入父页面URL(ids[0])作为Referer
+        m3u8_url = self.extract_m3u8_from_iframe(iframe_src, ids[0]) if iframe_src else None
         play_urls = []
         if m3u8_url:
             play_urls.append(f"播放${self.e64(f'{m3u8_url}@@@@{iframe_src}')}")
             vod_play_from = 'mivalyo'
         else:
-            play_urls.append(f"播放${self.e64(f'{iframe_src}@@@@{ids[0]}')}")
+            # 如果未找到m3u8，则使用iframe_src作为播放地址和Referer
+            play_urls.append(f"播放${self.e64(f'{iframe_src}@@@@{iframe_src}')}")
             vod_play_from = 'mivalyo'
 
         vod = {
@@ -185,28 +186,16 @@ class Spider(Spider):
 
     def playerContent(self, flag, id, vipFlags):
         ids = self.d64(id).split('@@@@')
-        m3u8_url = ids[0]
-        iframe_url = ids[1] if len(ids) > 1 else ids[0]  # 使用 iframe_url 作为 Referer
+        play_url = ids[0]
+        referer_url = ids[1] if len(ids) > 1 else ids[0]  # 使用第二个参数作为 Referer
         
-        # 关键修复：确保Referer正确设置为iframe_url
         headers = {
             'User-Agent': self.headers['User-Agent'],
-            'Referer': iframe_url,  # 使用提取的iframe_url作为Referer
+            'Referer': referer_url,  # 动态设置为所需的 Referer
             'Accept': '*/*',
-            'Origin': urlparse(iframe_url).scheme + '://' + urlparse(iframe_url).netloc
+            'Host': urlparse(play_url).netloc if 'm3u8' in play_url else urlparse(referer_url).netloc
         }
-        
-        # 如果是m3u8链接，添加必要的视频头信息
-        if '.m3u8' in m3u8_url:
-            headers.update({
-                'Accept': 'application/x-mpegURL, application/vnd.apple.mpegurl, */*',
-                'Accept-Encoding': 'identity',
-                'Connection': 'keep-alive',
-                'Sec-Fetch-Mode': 'cors',
-                'Sec-Fetch-Site': 'cross-site'
-            })
-        
-        return {'parse': 0, 'url': m3u8_url, 'header': headers}
+        return {'parse': 0, 'url': play_url, 'header': headers}
 
     def localProxy(self, param):
         url = self.d64(param['url'])
@@ -310,9 +299,3 @@ class Spider(Spider):
         if data and self.proxies:
             return f"{self.getProxyUrl()}&url={self.e64(data)}&type={type}"
         return data
-
-if __name__ == "__main__":
-    spider = Spider()
-    spider.init()
-    result = spider.detailContent(['https://gayvidsclub.com/all-gay-porn/ryuga-vs-junya-hatsutai-sex/'])
-    print(json.dumps(result, indent=2, ensure_ascii=False))
