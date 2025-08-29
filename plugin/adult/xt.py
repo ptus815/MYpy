@@ -8,6 +8,7 @@ from urllib.parse import urlparse, urljoin
 import requests
 from pyquery import PyQuery as pq
 from requests import Session
+
 sys.path.append('..')
 from base.spider import Spider
 
@@ -23,11 +24,11 @@ class Spider(Spider):
 
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8', # Updated Accept header
             'Accept-Encoding': 'gzip, deflate, br, zstd',
             'Accept-Language': 'zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2',
             'Connection': 'keep-alive',
-            'Cookie': 'cf_clearance=l.p7K1JLDZdAY7r_rkPfHMOe3T4.BTh094F8N.PGJzg-1756497579-1.2.1.1-_LM56dUOltrDPOFk1CYqG6q46CtD.htiefCwZIJCB3c7csXBR5xx2eOTrxkpm2nDqazm5MkrXJp6dxk6vCmy6rQKSZrWGdOWzGMCuDB4Pc9kWRWFlb9E6mZsEoy5ReVGle1aeYt0oSrSTnq8cbIKaCsVwvcRsXITqgKO6HtjPxK5wHI8w8KCht2MY5X_PVZ08ItyXkuCFVcReYnfXsTDmzRFgl5VmWjif9pwqhHlONE; zone-cap-2474627=1%3B1756497895',
+            'Cookie': 'cf_clearance=Vp1iA0hGaTqK26Z4Cdxt5a9ryxDu7BM22FhU7MTGmZs-1756499545-1.2.1.1-WhpJvEEhv2JbP73gvEdQxfZkFrG_O1gw56M6GnEytL6B3pvonGaAcXTWudeFHM4euuVvtREj8rvr3DhIxP9FOXDrY5BAbAFdxDbSwPHM8BdJtV.qAMxuiPj6YMsJfG0N0sDFVRmW.i1YsOBPSUCqThisAPgFA2CKAW9lbuEhFCY3qH6SFA5wFdclWAuZk2gPApMczR65XhFYtqnQJ_WzHlaYRsq.S7nS9AcPlvJadEk; zone-cap-2474627=1%3B1756499535', # You must replace this with a fresh, working cookie.
             'Host': 'gay.xtapes.in',
             'Sec-Fetch-Dest': 'document',
             'Sec-Fetch-Mode': 'navigate',
@@ -58,9 +59,10 @@ class Spider(Spider):
         url = path if path.startswith('http') else self.host + path
         try:
             resp = self.session.get(url, timeout=15)
+            resp.raise_for_status() # This will raise an exception for bad status codes (4xx or 5xx)
             resp.encoding = 'utf-8' if resp.encoding == 'ISO-8859-1' else resp.encoding
             return pq(resp.text)
-        except Exception as e:
+        except requests.exceptions.RequestException as e:
             print(f"获取页面失败: {e}")
             return pq("")
 
@@ -123,13 +125,13 @@ class Spider(Spider):
             "Asian": "/category/asian-guys-porn/",
             "OnlyFans": "/category/621397/",
             "Full Movies": "/category/porn-movies-214660/"
-          
+        
         }
         classes = [{'type_name': k, 'type_id': v} for k, v in cateManual.items()]
         
         # 获取首页视频列表
         data = self.getpq('/')
-        vlist = self.getlist(data('li'))
+        vlist = self.getlist(data('li.item')) # Using a more specific selector
         
         # 如果没有找到视频，尝试其他选择器
         if not vlist:
@@ -142,7 +144,7 @@ class Spider(Spider):
     def categoryContent(self, tid, pg, filter, extend):
         url = tid if pg == 1 else f"{tid}page/{pg}/"
         data = self.getpq(url)
-        vlist = self.getlist(data('li'))
+        vlist = self.getlist(data('li.item')) # Using a more specific selector
         
         # 如果没有找到视频，尝试其他选择器
         if not vlist:
@@ -155,7 +157,7 @@ class Spider(Spider):
     def searchContent(self, key, quick, pg="1"):
         url = f"/?s={key}" if pg == "1" else f"/page/{pg}/?s={key}"
         data = self.getpq(url)
-        vlist = self.getlist(data('li'))
+        vlist = self.getlist(data('li.item')) # Using a more specific selector
         
         # 如果没有找到视频，尝试其他选择器
         if not vlist:
@@ -225,4 +227,4 @@ class Spider(Spider):
                 'User-Agent': self.headers['User-Agent'],
                 'Referer': self.host
             }
-        } 
+        }
