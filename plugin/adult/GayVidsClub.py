@@ -100,14 +100,12 @@ class Spider(Spider):
                 return None
             soup = pq(response.text)
             
-            # 提取 JavaScript 代码
             scripts = soup('script')
             for script in scripts.items():
                 if not script.text():
                     continue
                 js_code = script.text()
                 
-                # 匹配截图中的 .m3u8 模式
                 m3u8_match = re.search(
                     r'https://mivalyo\.com/stream/[a-zA-Z0-9-]+/[a-zA-Z0-9-]+/\d+/[a-zA-Z0-9]+/master\.m3u8',
                     js_code
@@ -117,7 +115,6 @@ class Spider(Spider):
                     print(f"Found m3u8 via regex: {url}")
                     return url
                 
-                # 尝试提取 Base64 编码的 .m3u8
                 base64_matches = re.findall(r'atob\("([^"]+)"\)', js_code)
                 for encoded in base64_matches:
                     try:
@@ -129,7 +126,6 @@ class Spider(Spider):
                         continue
         except Exception as e:
             print(f"Error parsing iframe: {e}")
-
         return None
 
     def detailContent(self, ids):
@@ -140,7 +136,6 @@ class Spider(Spider):
         views_text = data('text:contains("views")').parent().text().strip() or ''
         tags = [tag.text().strip() for tag in data('.entry-tags a, .post-tags a, a[href*="/tag/"]').items() if tag.text().strip()]
         
-        # 提取 iframe src
         iframe_src = data('iframe').attr('src') or ''
         if not iframe_src:
             for attr in ['data-src', 'data-frame', 'data-iframe']:
@@ -159,14 +154,12 @@ class Spider(Spider):
         if iframe_src and not iframe_src.startswith('http'):
             iframe_src = urljoin(self.host, iframe_src)
 
-        # 提取 .m3u8 链接，传入父页面URL(ids[0])作为Referer
         m3u8_url = self.extract_m3u8_from_iframe(iframe_src, ids[0]) if iframe_src else None
         play_urls = []
         if m3u8_url:
             play_urls.append(f"播放${self.e64(f'{m3u8_url}@@@@{iframe_src}')}")
             vod_play_from = 'mivalyo'
         else:
-            # 如果未找到m3u8，则使用iframe_src作为播放地址和Referer
             play_urls.append(f"播放${self.e64(f'{iframe_src}@@@@{iframe_src}')}")
             vod_play_from = 'mivalyo'
 
@@ -187,15 +180,18 @@ class Spider(Spider):
     def playerContent(self, flag, id, vipFlags):
         ids = self.d64(id).split('@@@@')
         play_url = ids[0]
-        referer_url = ids[1] if len(ids) > 1 else ids[0]  # 使用第二个参数作为 Referer
+        referer_url = ids[1] if len(ids) > 1 else ids[0]
+        
+        # 如果URL不是已知的视频格式，则设置parse标志让播放器APP来解析
+        should_parse = 1 if not self.isVideoFormat(play_url) else 0
         
         headers = {
             'User-Agent': self.headers['User-Agent'],
-            'Referer': referer_url,  # 动态设置为所需的 Referer
+            'Referer': referer_url,
             'Accept': '*/*',
-            'Host': urlparse(play_url).netloc if 'm3u8' in play_url else urlparse(referer_url).netloc
+            'Host': urlparse(play_url).netloc
         }
-        return {'parse': 0, 'url': play_url, 'header': headers}
+        return {'parse': should_parse, 'url': play_url, 'header': headers}
 
     def localProxy(self, param):
         url = self.d64(param['url'])
@@ -299,3 +295,9 @@ class Spider(Spider):
         if data and self.proxies:
             return f"{self.getProxyUrl()}&url={self.e64(data)}&type={type}"
         return data
+
+if __name__ == "__main__":
+    spider = Spider()
+    spider.init()
+    result = spider.detailContent(['https://gayvidsclub.com/all-gay-porn/ryuga-vs-junya-hatsutai-sex/'])
+    print(json.dumps(result, indent=2, ensure_ascii=False))
