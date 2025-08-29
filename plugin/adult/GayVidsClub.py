@@ -69,14 +69,26 @@ class Spider(Spider):
                 vod_pic = img_elem.attr('src') or img_elem.attr('data-src') or img_elem.attr('data-original') or ''
                 if vod_pic and not vod_pic.startswith('http'):
                     vod_pic = urljoin(self.host, vod_pic)
-                # 日期（如果有）
+
+                # 标签
+                tag = i('.cat-links a').text().strip() if i('.cat-links a') else ''
+
+                # 简介
+                desc = i('.entry-summary p').text().strip() if i('.entry-summary p') else ''
+
+                # 观看信息（如果有）
+                views = i('.entry-meta .view').text().strip() if i('.entry-meta .view') else ''
+
+                # 日期
                 vod_year = i('.entry-date').text().strip() if i('.entry-date') else ''
+
                 vlist.append({
                     'vod_id': b64encode(vod_url.encode('utf-8')).decode('utf-8'),
                     'vod_name': vod_name,
                     'vod_pic': vod_pic,
                     'vod_year': vod_year,
-                    'vod_remarks': '',
+                    'vod_remarks': views or tag,  # 优先展示观看数，否则展示分类标签
+                    'vod_content': desc,
                     'style': {'ratio': 1.33, 'type': 'rect'}
                 })
             except Exception as e:
@@ -102,12 +114,17 @@ class Spider(Spider):
             try:
                 rss = self.session.get(f'{self.host}/feed', timeout=15).text
                 d = pq(rss)
-                vlist = [{'vod_id': b64encode(it('link').text().strip().encode('utf-8')).decode('utf-8'),
-                          'vod_name': it('title').text().strip(),
-                          'vod_pic': re.search(r'<img[^>]+src=["\']([^"\']+)["\']', it('description').text() or '', re.I).group(1) if re.search(r'<img[^>]+src=["\']([^"\']+)["\']', it('description').text() or '', re.I) else '',
-                          'vod_year': '',
-                          'vod_remarks': '',
-                          'style': {'ratio': 1.33, 'type': 'rect'}} for it in d('item').items() if it('link').text().strip() and it('title').text().strip()]
+                vlist = [{
+                    'vod_id': b64encode(it('link').text().strip().encode('utf-8')).decode('utf-8'),
+                    'vod_name': it('title').text().strip(),
+                    'vod_pic': re.search(r'<img[^>]+src=["\']([^"\']+)["\']',
+                                         it('description').text() or '', re.I).group(1) if re.search(
+                        r'<img[^>]+src=["\']([^"\']+)["\']', it('description').text() or '', re.I) else '',
+                    'vod_year': '',
+                    'vod_remarks': '',
+                    'vod_content': it('description').text().strip()[:80],  # 简要内容
+                    'style': {'ratio': 1.33, 'type': 'rect'}
+                } for it in d('item').items() if it('link').text().strip() and it('title').text().strip()]
             except Exception as e:
                 print(f'RSS解析失败: {e}')
         return {'class': classes, 'filters': {}, 'list': vlist}
