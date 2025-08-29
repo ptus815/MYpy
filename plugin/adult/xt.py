@@ -24,8 +24,17 @@ class Spider(Spider):
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'zh-CN,zh;q=0.8,en-US;q=0.3,en;q=0.2',
-            'Referer': 'https://gay.xtapes.in/',
+            'Accept-Encoding': 'gzip, deflate, br, zstd',
+            'Accept-Language': 'zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2',
+            'Connection': 'keep-alive',
+            'Cookie': 'cf_clearance=l.p7K1JLDZdAY7r_rkPfHMOe3T4.BTh094F8N.PGJzg-1756497579-1.2.1.1-_LM56dUOltrDPOFk1CYqG6q46CtD.htiefCwZIJCB3c7csXBR5xx2eOTrxkpm2nDqazm5MkrXJp6dxk6vCmy6rQKSZrWGdOWzGMCuDB4Pc9kWRWFlb9E6mZsEoy5ReVGle1aeYt0oSrSTnq8cbIKaCsVwvcRsXITqgKO6HtjPxK5wHI8w8KCht2MY5X_PVZ08ItyXkuCFVcReYnfXsTDmzRFgl5VmWjif9pwqhHlONE; zone-cap-2474627=1%3B1756497895',
+            'Host': 'gay.xtapes.in',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
+            'Sec-GPC': '1',
+            'Upgrade-Insecure-Requests': '1'
         }
 
         self.host = "https://gay.xtapes.in"
