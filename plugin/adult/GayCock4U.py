@@ -2,16 +2,16 @@
 import re
 import json
 import sys
-from urllib.parse import urljoin
 import requests
+from urllib.parse import urljoin
+from base64 import b64encode, b64decode
 from pyquery import PyQuery as pq
 sys.path.append('..')
 from base.spider import Spider
 
-
 class Spider(Spider):
 
-    def init(self, extend=""):
+    def __init__(self, extend=""):
         try:
             self.extend = json.loads(extend) if extend else {}
         except:
@@ -29,31 +29,27 @@ class Spider(Spider):
         self.session = requests.Session()
         self.session.headers.update(self.headers)
 
-def e64(self, text: str) -> str:
-    try:
-        # 对文本进行 UTF-8 编码并进行 base64 编码
-        return b64encode(text.encode('utf-8')).decode('utf-8')
-    except Exception:
-        return ''
+    def e64(self, text: str) -> str:
+        """ Base64 编码 """
+        try:
+            return b64encode(text.encode('utf-8')).decode('utf-8')
+        except Exception as e:
+            self.log(f"Base64 编码失败: {str(e)}")
+            return ''
 
-def d64(self, text: str) -> str:
-    try:
-        # 对 base64 编码的文本进行解码并返回
-        return b64decode(text.encode('utf-8')).decode('utf-8')
-    except Exception:
-        return ''
+    def d64(self, text: str) -> str:
+        """ Base64 解码 """
+        try:
+            return b64decode(text.encode('utf-8')).decode('utf-8')
+        except Exception as e:
+            self.log(f"Base64 解码失败: {str(e)}")
+            return ''
 
     def getName(self):
         return "GayCock4U"
 
     def isVideoFormat(self, url):
         return any(ext in url for ext in ['.m3u8', '.mp4', '.ts'])
-
-    def manualVideoCheck(self):
-        return False
-
-    def destroy(self):
-        pass
 
     def homeContent(self, filter):
         cateManual = [
@@ -159,6 +155,7 @@ def d64(self, text: str) -> str:
 
             # 简介
             info_text = doc('.entry-meta, .post-meta').text().strip() or ''
+
             # iframe 播放源
             iframe_src = None
             matches = re.findall(r'<iframe[^>]*src=["\'](https?://d-s\.io/[^"\']+)["\']', resp.text, re.IGNORECASE)
@@ -192,29 +189,115 @@ def d64(self, text: str) -> str:
             vlist = self.getlist(articles)
             return {'list': vlist, 'page': pg, 'pagecount': 9999, 'limit': 90, 'total': 999999}
         except Exception as e:
-            self.log(f"搜索失败: {str(e)}")
-            return {'list': []}
+            self.log(f"搜索失败: {str(e)}
+            return {'list': [], 'page': pg, 'pagecount': 0, 'limit': 90, 'total': 0}
+            def fetch_html(self, url):
+        """ 获取网页 HTML 内容 """
+        try:
+            resp = self.session.get(url, timeout=30)
+            resp.raise_for_status()
+            return resp.text
+        except requests.exceptions.RequestException as e:
+            self.log(f"请求失败: {str(e)}")
+            return ''
 
-    def playerContent(self, flag, id, vipFlags):
-        url = self.d64(id)
-        headers = {
-            'User-Agent': self.headers['User-Agent'],
-            'Referer': self.host,
-            'Accept': 'video/*,*/*;q=0.9',
+    def clean_url(self, url):
+        """ 清理并返回一个有效的 URL """
+        if url and not url.startswith('http'):
+            return urljoin(self.host, url)
+        return url
+
+    def extract_video_url(self, html_content):
+        """ 提取视频播放链接 """
+        video_url = None
+        iframe_matches = re.findall(r'<iframe[^>]*src=["\'](https?://d-s\.io/[^"\']+)["\']', html_content, re.IGNORECASE)
+        if iframe_matches:
+            video_url = iframe_matches[0]
+        return video_url
+
+    def extract_video_details(self, html_content):
+        """ 从视频详情页提取信息 """
+        doc = pq(html_content)
+
+        # 获取视频标题
+        title = doc('meta[property="og:title"]').attr('content') or doc('h1').text().strip() or '无标题'
+
+        # 获取视频封面
+        vod_pic = doc('meta[property="og:image"]').attr('content') or ''
+        if not vod_pic:
+            img_elem = doc('img[src*="cover"], img[src*="poster"], img[src*="thumb"]').eq(0)
+            vod_pic = img_elem.attr('src') or img_elem.attr('data-src') or ''
+
+        # 获取视频简介
+        info_text = doc('.entry-meta, .post-meta').text().strip() or ''
+
+        # 获取标签
+        tags = [t.text().strip() for t in doc('.entry-tags a, .post-tags a').items() if t.text().strip()]
+
+        # 提取 iframe 播放链接
+        iframe_src = self.extract_video_url(html_content)
+        if iframe_src:
+            iframe_src = self.clean_url(iframe_src)
+
+        return {
+            'vod_name': title,
+            'vod_pic': vod_pic,
+            'vod_content': info_text,
+            'vod_tag': ', '.join(tags),
+            'vod_play_url': self.e64(iframe_src) if iframe_src else ''
         }
 
-        # 嗅探 iframe 逻辑
-        if 'd-s.io' in url:
-            try:
-                resp = self.session.get(url, headers=headers, timeout=30)
-                resp.raise_for_status()
-                match = re.search(r'<video.*?src="([^"]*)"', resp.text)
-                if match:
-                    video_url = match.group(1).replace('&amp;', '&')
-                    return {'parse': 0, 'url': video_url, 'header': headers}
-                else:
-                    return {'parse': 1, 'url': url, 'header': headers}
-            except Exception:
-                return {'parse': 1, 'url': url, 'header': headers}
+    def searchContent(self, key, quick, pg="1"):
+        """ 搜索视频 """
+        try:
+            url = f"{self.host}/search"
+            resp = self.session.get(url, params={'s': key, 'page': pg}, timeout=30)
+            resp.raise_for_status()
 
-        return {'parse': 1, 'url': url, 'header': headers}
+            doc = pq(resp.text)
+            articles = doc('article')
+            vlist = self.getlist(articles)
+
+            return {
+                'list': vlist,
+                'page': pg,
+                'pagecount': 9999,  # 假定无限页数
+                'limit': 90,
+                'total': len(vlist)
+            }
+
+        except Exception as e:
+            self.log(f"搜索失败: {str(e)}")
+            return {'list': [], 'page': pg, 'pagecount': 0, 'limit': 90, 'total': 0}
+
+    def get_video_play_url(self, video_page_url):
+        """ 获取视频的播放链接 """
+        html_content = self.fetch_html(video_page_url)
+        video_details = self.extract_video_details(html_content)
+
+        # 提取视频播放地址
+        video_play_url = video_details.get('vod_play_url')
+        if video_play_url:
+            return {
+                'vod_name': video_details['vod_name'],
+                'vod_pic': video_details['vod_pic'],
+                'vod_play_url': video_play_url,
+            }
+
+        return {}
+
+    def fetch_category_page(self, category_url, pg=1):
+        """ 获取分类页面并提取视频列表 """
+        try:
+            url = f"{self.host}{category_url}page/{pg}/"
+            html_content = self.fetch_html(url)
+            doc = pq(html_content)
+
+            articles = doc('article')
+            video_list = self.getlist(articles)
+
+            return {'list': video_list, 'page': pg, 'pagecount': 9999, 'total': len(video_list)}
+        except Exception as e:
+            self.log(f"分类页面加载失败: {str(e)}")
+            return {'list': [], 'page': pg, 'pagecount': 0, 'total': 0}
+            
