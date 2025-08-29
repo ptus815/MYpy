@@ -7,20 +7,20 @@ from base64 import b64encode, b64decode
 
 import requests
 from pyquery import PyQuery as pq
+
 sys.path.append('..')
 from base.spider import Spider
 
-
 class Spider(Spider):
 
-    def init(self, extend=""):
+    def __init__(self, extend=""):
         try:
             self.extend = json.loads(extend) if extend else {}
         except:
             self.extend = {}
-        
+
         self.host = "https://gaycock4u.com"
-        
+
         self.headers = {
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
             'Accept-Encoding': 'gzip, deflate, br',
@@ -28,7 +28,7 @@ class Spider(Spider):
             'Connection': 'keep-alive',
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0',
         }
-        
+
         self.session = requests.Session()
         self.session.headers.update(self.headers)
 
@@ -123,8 +123,8 @@ class Spider(Spider):
             url = tid if tid.startswith('http') else f"{self.host}{tid}"
             if pg != '1':
                 url = f"{url}page/{pg}/" if url.endswith('/') else f"{url}/page/{pg}/"
-        else:
-            url = f"{self.host}/page/{pg}/" if pg != '1' else self.host
+            else:
+                url = f"{self.host}/page/{pg}/" if pg != '1' else self.host
 
         try:
             resp = self.session.get(url, timeout=30)
@@ -166,8 +166,8 @@ class Spider(Spider):
             matches = re.findall(r'<iframe[^>]*src=["\'](https?://d-s\.io/[^"\']+)["\']', resp.text, re.IGNORECASE)
             if matches:
                 iframe_src = matches[0]
-            if iframe_src and not iframe_src.startswith('http'):
-                iframe_src = urljoin(self.host, iframe_src)
+                if iframe_src and not iframe_src.startswith('http'):
+                    iframe_src = urljoin(self.host, iframe_src)
 
             vod_play_url = self.e64(iframe_src or url)
             vod_content = ' | '.join(filter(None, [info_text]))
@@ -205,7 +205,7 @@ class Spider(Spider):
             'Accept': 'video/*,*/*;q=0.9',
         }
 
-        # 嗅探 iframe 逻辑
+   
         if 'd-s.io' in url:
             try:
                 resp = self.session.get(url, headers=headers, timeout=30)
@@ -215,7 +215,13 @@ class Spider(Spider):
                     video_url = match.group(1).replace('&amp;', '&')
                     return {'parse': 0, 'url': video_url, 'header': headers}
                 else:
-                    return {'parse': 1, 'url': url, 'header': headers}
+                 
+                    api_url = f"https://d-s.io/dood?op=watch&hash=223543660-185-71-1756449288-13317439475d9c23cf5f058dc2a980e1&token=pvmn8l25ruqv44owkambhemu&embed=1&ref2={url}"
+                    resp_api = self.session.get(api_url, headers=headers, timeout=30)
+                    resp_api.raise_for_status()
+                    video_data = resp_api.json()
+                    video_url = video_data.get('video_url', '')
+                    return {'parse': 0, 'url': video_url, 'header': headers}
             except Exception:
                 return {'parse': 1, 'url': url, 'header': headers}
 
