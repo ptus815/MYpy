@@ -1,9 +1,6 @@
 import re
 import json
 import sys
-import time
-import random
-import string
 from urllib.parse import urljoin
 from base64 import b64encode, b64decode
 
@@ -13,6 +10,7 @@ sys.path.append('..')
 from base.spider import Spider
 
 class Spider(Spider):
+
  def init(self, extend=""):
     try:
         self.extend = json.loads(extend) if extend else {}
@@ -31,7 +29,7 @@ class Spider(Spider):
     self.session = requests.Session()
     self.session.headers.update(self.headers)
 
-def e64(self, text: str) -> str:
+ def e64(self, text: str) -> str:
     try:
         return b64encode(text.encode('utf-8')).decode('utf-8')
     except Exception:
@@ -43,19 +41,19 @@ def d64(self, text: str) -> str:
     except Exception:
         return ''
 
-def getName(self):
+ def getName(self):
     return "GayCock4U"
 
-def isVideoFormat(self, url):
+ def isVideoFormat(self, url):
     return any(ext in url for ext in ['.m3u8', '.mp4', '.ts'])
 
-def manualVideoCheck(self):
+ def manualVideoCheck(self):
     return False
 
-def destroy(self):
+ def destroy(self):
     pass
 
-def homeContent(self, filter):
+ def homeContent(self, filter):
     cateManual = [
         {'type_name': 'Amateur', 'type_id': '/category/amateur/'},
         {'type_name': 'Bareback', 'type_id': '/category/bareback/'},
@@ -80,7 +78,7 @@ def homeContent(self, filter):
     ]
     return {'class': cateManual, 'filters': {}}
 
-def getlist(self, articles):
+ def getlist(self, articles):
     vlist = []
     for article in articles.items():
         try:
@@ -109,16 +107,13 @@ def getlist(self, articles):
                 'style': {'ratio': 1.33, 'type': 'rect'}
             })
         except Exception as e:
-            try:
-                self.log(f"解析视频失败: {str(e)}")
-            except:
-                pass
+            self.log(f"解析视频失败: {str(e)}")
     return vlist
 
-def homeVideoContent(self):
+ def homeVideoContent(self):
     return self.categoryContent('', '1', False, {})
 
-def categoryContent(self, tid, pg, filter, extend):
+ def categoryContent(self, tid, pg, filter, extend):
     result = {'page': pg, 'pagecount': 9999, 'limit': 90, 'total': 999999}
     if tid:
         url = tid if tid.startswith('http') else f"{self.host}{tid}"
@@ -130,20 +125,16 @@ def categoryContent(self, tid, pg, filter, extend):
     try:
         resp = self.session.get(url, timeout=30)
         resp.raise_for_status()
-        doc = pq(resp.text)
-        articles = doc('article')
+   articles = doc('article')
         vlist = self.getlist(articles)
         result['list'] = vlist
     except Exception as e:
-        try:
-            self.log(f"获取分类内容失败: {str(e)}")
-        except:
-            pass
+        self.log(f"获取分类内容失败: {str(e)}")
         result['list'] = []
 
     return result
 
-def detailContent(self, ids):
+ def detailContent(self, ids):
     try:
         url = self.d64(ids[0])
         resp = self.session.get(url, timeout=30)
@@ -178,13 +169,10 @@ def detailContent(self, ids):
         }
         return {'list': [vod]}
     except Exception as e:
-        try:
-            self.log(f"获取视频详情失败: {str(e)}")
-        except:
-            pass
+        self.log(f"获取视频详情失败: {str(e)}")
         return {'list': []}
 
-def searchContent(self, key, quick, pg="1"):
+ def searchContent(self, key, quick, pg="1"):
     try:
         url = self.host
         resp = self.session.get(url, params={'s': key}, timeout=30)
@@ -194,16 +182,13 @@ def searchContent(self, key, quick, pg="1"):
         vlist = self.getlist(articles)
         return {'list': vlist, 'page': pg, 'pagecount': 9999, 'limit': 90, 'total': 999999}
     except Exception as e:
-        try:
-            self.log(f"搜索失败: {str(e)}")
-        except:
-            pass
+        self.log(f"搜索失败: {str(e)}")
         return {'list': []}
 
-def playerContent(self, flag, id, vipFlags):
+ def playerContent(self, flag, id, vipFlags):
     """
     支持 iframe XHR 嗅探：
-    1. 如果 Push 解析失败，尝试从 iframe src 获取真实视频链接（d-s.io 流程）。
+    1. 如果 Push 解析失败，尝试从 iframe src 获取真实视频链接。
     2. 支持 mp4 / m3u8 自动解析。
     """
     url = self.d64(id)
@@ -214,99 +199,25 @@ def playerContent(self, flag, id, vipFlags):
         'X-Requested-With': 'XMLHttpRequest'
     }
 
-    # d-s.io 链接处理
+    # iframe 或 d-s.io 链接处理
     if 'd-s.io' in url:
         try:
-            # 1) 请求 iframe 页面以获取 cookie 和页面 JS
-            page_headers = {
-                'User-Agent': self.headers['User-Agent'],
-                'Referer': self.host,
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-            }
-            resp = self.session.get(url, headers=page_headers, timeout=30)
+            # 获取 iframe 页面
+            resp = self.session.get(url, headers={'User-Agent': self.headers['User-Agent'], 'Referer': self.host}, timeout=30)
             resp.raise_for_status()
-            text = resp.text
-
-            # 2) 尝试提取 pass_md5 链接（可能是相对或绝对）
-            m_pass = re.search(r'(https?://d-s\.io/pass_md5/[^\s\'"]+|/pass_md5/[^\s\'"]+)', text)
-            if not m_pass:
-                # 备选：有时JS里写成 $.get('/pass_md5/....'
-                m_pass = re.search(r"/pass_md5/[^'\"\s)]+", text)
-            if not m_pass:
-                
-                return {'parse': 1, 'url': url, 'header': headers}
-
-            pass_md5_url = m_pass.group(0)
-            if pass_md5_url.startswith('/'):
-                pass_md5_url = urljoin('https://d-s.io', pass_md5_url)
-
-            # 3) 从页面或 pass_md5 链接中提取 token（取最后一个路径段为 token）
-            token_val = None
-            m_token = re.search(r'token=([A-Za-z0-9_\-]+)', text)
-            if m_token:
-                token_val = m_token.group(1)
-            else:
-                # 从 pass_md5 url 末尾取 token
-                try:
-                    token_val = pass_md5_url.rstrip('/').split('/')[-1]
-                except:
-                    token_val = None
-
-            if not token_val:
-                # 没有 token，回退
-                return {'parse': 1, 'url': url, 'header': headers}
-
-            # 4) 请求 pass_md5（XHR 风格）拿到 CDN base
-            ajax_headers = {
-                'User-Agent': self.headers['User-Agent'],
-                'Accept': '*/*',
-                'X-Requested-With': 'XMLHttpRequest',
-                'Referer': url,
-            }
-            r = self.session.get(pass_md5_url, headers=ajax_headers, timeout=30)
-            r.raise_for_status()
-            base = r.text.strip().strip('\'" \r\n')
-            if not base:
-                # 未取得正确 base，回退
-                return {'parse': 1, 'url': url, 'header': headers}
-
-            # 5) 构造 final_url：base + 10 随机字符 + ?token=...&expiry=Date.now()
-            rand10 = ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(10))
-            expiry_ms = int(time.time() * 1000)
-            final_url = f"{base}{rand10}?token={token_val}&expiry={expiry_ms}"
-
-            # 6) 请求 final_url（保持同一 session），使用接近浏览器的视频请求头
-            video_headers = {
-                'User-Agent': self.headers['User-Agent'],
-                'Referer': 'https://d-s.io/',
-                'Accept': 'video/webm,video/ogg,video/*;q=0.9,application/ogg;q=0.7,audio/*;q=0.6,*/*;q=0.5',
-                'Accept-Encoding': 'identity',
-                'Accept-Language': 'zh-CN,zh;q=0.8,en-US;q=0.3,en;q=0.2',
-                'Connection': 'keep-alive',
-                'Range': 'bytes=0-',
-                'Sec-Fetch-Dest': 'video',
-                'Sec-Fetch-Mode': 'no-cors',
-                'Sec-Fetch-Site': 'cross-site',
-            }
-            r2 = self.session.get(final_url, headers=video_headers, stream=True, allow_redirects=True, timeout=30)
-
-           
-            ct = (r2.headers.get('content-type') or '').lower()
-            final_requested_url = r2.url
-            if 'video' in ct or final_requested_url.endswith('.mp4') or '.mp4' in final_requested_url:
-                return {'parse': 0, 'url': final_url, 'header': video_headers}
-        
-            if 'mpegurl' in ct or '.m3u8' in final_requested_url:
-                return {'parse': 0, 'url': final_url, 'header': video_headers}
-
-        
-            return {'parse': 0, 'url': final_url, 'header': video_headers}
-        except Exception as e:
-            try:
-                self.log(f"d-s.io 播放链接解析失败: {str(e)}")
-            except:
-                pass
+            # 尝试获取 js 异步请求的真实视频链接
+            match_hash_token = re.search(r'/dood\?op=watch&hash=([^&]+)&token=([^&]+)', resp.text)
+            if match_hash_token:
+                hash_val, token_val = match_hash_token.groups()
+                dood_url = f"https://d-s.io/dood?op=watch&hash={hash_val}&token={token_val}&embed=1&ref2={url}"
+                dood_resp = self.session.get(dood_url, headers=headers, timeout=30)
+                dood_resp.raise_for_status()
+                video_url = dood_resp.text.strip()
+                if video_url:
+                    return {'parse': 0, 'url': video_url, 'header': headers}
+            # fallback: 使用 iframe src 直接返回
+            return {'parse': 1, 'url': url, 'header': headers}
+        except Exception:
             return {'parse': 1, 'url': url, 'header': headers}
 
-    # 非 d-s.io 链接：直接返回原始 url
-    return {'parse': 1, 'url': url, 'header': headers}
+    return {'parse': 1, 'url': url, 'header': headers}   去开始修改
