@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import json
-from urllib.parse import urljoin
-from base64 import b64encode, b64decode
+from urllib.parse import urljoin, urlparse
 from pyquery import PyQuery as pq
 from requests import Session
 from base.spider import Spider
@@ -41,6 +40,7 @@ class GayVidsPushSpider(Spider):
     def getName(self):
         return "GayVidsClub-Push"
 
+    # 抓取页面，返回 PyQuery 对象
     def getpq(self, path=''):
         url = path if path.startswith('http') else self.host + path
         try:
@@ -51,15 +51,15 @@ class GayVidsPushSpider(Spider):
             print(f"获取页面失败: {e}")
             return pq("")
 
-    # 视频列表解析，直接生成 Base64 ID
+    # 视频列表解析
     def get_video_list(self, selector):
         vlist = []
         for i in selector.items():
             try:
                 link_elem = i('h3 a, h2 a, h1 a, .entry-title a').eq(0)
-                vod_url = link_elem.attr('href').strip()
+                vod_id = link_elem.attr('href').strip()
                 vod_name = link_elem.text().strip()
-                if not vod_url or not vod_name:
+                if not vod_id or not vod_name:
                     continue
                 img_elem = i('figure img').eq(0)
                 vod_pic = img_elem.attr('src') or img_elem.attr('data-src') or ''
@@ -67,10 +67,6 @@ class GayVidsPushSpider(Spider):
                     vod_pic = urljoin(self.host, vod_pic)
                 vod_year = next((line.strip() for line in i('figure').text().split('\n') if line.strip()), '')
                 vod_remarks = i('time').eq(0).text().strip() or ''
-
-                # Base64 ID，格式：video_url@@@@video_url
-                vod_id = b64encode(f"{vod_url}@@@@{vod_url}".encode('utf-8')).decode('utf-8')
-
                 vlist.append({
                     'vod_id': vod_id,
                     'vod_name': vod_name,
@@ -113,7 +109,7 @@ class GayVidsPushSpider(Spider):
     # -------------------- Spider 接口 --------------------
     def homeContent(self, filter):
         classes = [{'type_name': k, 'type_id': v} for k, v in self.cateManual.items()]
-        # 首页最新视频
+        # 首页视频列表
         data = self.getpq('/all-gay-porn/')
         vlist = self.get_video_list(data('article'))
         return {'class': classes, 'filters': {}, 'list': vlist}
@@ -121,15 +117,14 @@ class GayVidsPushSpider(Spider):
     def categoryContent(self, tid, pg, filter, extend):
         url = tid if pg == 1 else f"{tid}page/{pg}/"
         data = self.getpq(url)
-        vlist = self.get_video_list(data('article'))
-        return {'page': pg, 'pagecount': 9999, 'limit': 90, 'total': 999999, 'list': vlist}
+        return {'page': pg, 'pagecount': 9999, 'limit': 90, 'total': 999999, 'list': self.get_video_list(data('article'))}
 
     def detailContent(self, ids):
-        video_url = b64decode(ids[0].encode('utf-8')).decode('utf-8').split('@@@@')[0]
-        data = self.getpq(video_url)
+        url = ids[0]
+        data = self.getpq(url)
         title = data('h1').text().strip() or '无标题'
         iframe_src = self.extract_iframe_src(data)
-        play_url = iframe_src if iframe_src else video_url
+        play_url = iframe_src if iframe_src else url
         vod_json = self.forward_to_push(play_url)
         if 'list' in vod_json and len(vod_json['list']) > 0:
             vod_json['list'][0]['vod_name'] = title
@@ -138,11 +133,11 @@ class GayVidsPushSpider(Spider):
     def searchContent(self, key, quick, pg="1"):
         url = f"/?s={key}" if pg == "1" else f"/page/{pg}/?s={key}"
         data = self.getpq(url)
-        vlist = self.get_video_list(data('article'))
-        return {'list': vlist, 'page': pg}
+        return {'list': self.get_video_list(data('article')), 'page': pg}
 
     def playerContent(self, flag, id, vipFlags):
         try:
+            from base64 import b64decode
             ids = b64decode(id.encode('utf-8')).decode('utf-8').split('@@@@')
             play_url = ids[0]
             referer_url = ids[1] if len(ids) > 1 else ids[0]
