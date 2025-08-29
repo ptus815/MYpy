@@ -1,11 +1,11 @@
 {
-    "spider": ./jar/fm.jar;md5;102350b6cf5dff7cb36fe9ce50cf085e",
+    "spider": "./jar/fm.jar;md5;b11a2ce9eb2bbe268343edf57810f558",
     "sites": [
         {
             "key": "GayVidsClub",
             "name": "GayVidsClub",
             "type": 3,
-            "api": "https://raw.githubusercontent.com/ptus815/PQ/refs/heads/main/plugin/adult/GayVidsClub.py",
+            "api": "./plugin/adult/GayVidsClub.py",
             "searchable": 1,
             "quickSearch": 1,
             "filterable": 0
