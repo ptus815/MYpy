@@ -5,7 +5,7 @@
             "key": "GayVidsClub",
             "name": "GayVidsClub",
             "type": 3,
-            "api": "./plugin/adult/GayVidsPushSpider.py",
+            "api": "https://raw.githubusercontent.com/ptus815/PQ/refs/heads/main/plugin/adult/GayVidsClub.py",
             "searchable": 1,
             "quickSearch": 1,
             "filterable": 0,
