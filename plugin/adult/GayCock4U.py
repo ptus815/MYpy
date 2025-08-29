@@ -191,22 +191,22 @@ class Spider(Spider):
     def get_diso_video(self, iframe_url):
         """
         从 d-s.io 或 d-iso iframe 链接获取真实视频流地址。
-        兼容 Spider 类，可在 playerContent 中调用。
-        XHR 请求带 iframe URL 作为 Referer，保证防盗链通过。
+        XHR 请求带 iframe URL 作为 Referer。
         """
         headers = {
             'User-Agent': self.headers['User-Agent'],
-            'Referer': iframe_url,            # ⚠️ 这里使用 iframe 链接作为 Referer
+            'Referer': iframe_url,  # 使用 iframe 页面地址作为 Referer
             'Accept': '*/*',
             'X-Requested-With': 'XMLHttpRequest'
         }
 
         try:
+            # 请求 iframe 页面
             resp = self.session.get(iframe_url, headers=headers, timeout=30)
             resp.raise_for_status()
             html = resp.text
 
-            # 尝试正则抓 hash 和 token
+            # 匹配 hash 和 token
             match = re.search(r'/dood\?op=watch&hash=([^&]+)&token=([^&]+)', html)
             if match:
                 hash_val, token_val = match.groups()
@@ -215,4 +215,30 @@ class Spider(Spider):
                 dood_resp.raise_for_status()
                 video_url = dood_resp.text.strip()
                 if video_url and (video_url.endswith(".m3u8") or video_url.endswith(".mp4")):
-                    return {'parse': 0, 'url
+                    return {'parse': 0, 'url': video_url, 'header': headers}
+
+            # fallback 返回 iframe 原始链接
+            return {'parse': 1, 'url': iframe_url, 'header': headers}
+
+        except Exception as e:
+            self.log(f"获取 d-iso 视频失败: {str(e)}")
+            return {'parse': 1, 'url': iframe_url, 'header': headers}
+
+    def playerContent(self, flag, id, vipFlags):
+        """
+        支持 iframe XHR 嗅探：
+        1. 如果 Push 解析失败，尝试从 iframe src 获取真实视频链接。
+        2. 支持 mp4 / m3u8 自动解析。
+        """
+        url = self.d64(id)
+
+        if 'd-s.io' in url or 'd-iso' in url:
+            return self.get_diso_video(url)
+
+        # 非托管平台视频直接返回
+        headers = {
+            'User-Agent': self.headers['User-Agent'],
+            'Referer': self.host,
+            'Accept': '*/*'
+        }
+        return {'parse': 1, 'url': url, 'header': headers}
