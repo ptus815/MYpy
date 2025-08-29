@@ -65,22 +65,24 @@ class Spider(Spider):
                 vod_name = link_elem.text().strip()
                 if not vod_url or not vod_name:
                     continue
+                
                 img_elem = i('figure img').eq(0)
-                vod_pic = img_elem.attr('src') or img_elem.attr('data-src') or img_elem.attr('data-original') or ''
+                vod_pic = img_elem.attr('src') or img_elem.attr('data-src') or img_elem.attr('data-original') or img_elem.attr('data-thumb') or img_elem.attr('data-lazy-src') or ''
+                if not vod_pic and img_elem.attr('srcset'):
+                    vod_pic = img_elem.attr('srcset').split(',')[0].split(' ')[0]
                 if vod_pic and not vod_pic.startswith('http'):
                     vod_pic = urljoin(self.host, vod_pic)
-                # 日期
-                vod_year = i('.entry-date').text().strip() if i('.entry-date') else ''
-                # 分类/系列标签
-                vod_tag_elem = i('.entry-categories a, .post-categories a')
-                vod_tag = ', '.join([tag.text().strip() for tag in vod_tag_elem.items() if tag.text().strip()]) if vod_tag_elem else ''
-                # 封面视频字典
+                
+                # Extracting series name (if available) and date
+                vod_year = next((line.strip() for line in i('figure').text().strip().split('\n') if line.strip() and not line.startswith('▶') and len(line) > 1), '')
+                vod_remarks = i('time, .entry-meta a[href*="/202"], a[href*="/202"]').eq(0).text().strip() or i('time').attr('datetime', '').split('T')[0]
+                
                 vlist.append({
                     'vod_id': b64encode(vod_url.encode('utf-8')).decode('utf-8'),
                     'vod_name': vod_name,
                     'vod_pic': vod_pic,
                     'vod_year': vod_year,
-                    'vod_remarks': vod_tag,
+                    'vod_remarks': vod_remarks,
                     'style': {'ratio': 1.33, 'type': 'rect'}
                 })
             except Exception as e:
@@ -102,7 +104,7 @@ class Spider(Spider):
         classes = [{'type_name': k, 'type_id': v} for k, v in cateManual.items()]
         data = self.getpq('/all-gay-porn/')
         vlist = self.getlist(data('article'))
-        if not vlist:  # RSS 回退
+        if not vlist:  # RSS fallback
             try:
                 rss = self.session.get(f'{self.host}/feed', timeout=15).text
                 d = pq(rss)
@@ -131,14 +133,11 @@ class Spider(Spider):
     def detailContent(self, ids):
         url = b64decode(ids[0]).decode('utf-8')
         data = self.getpq(url)
-        title = data('h1').text().strip() or '无标题'
-        # 视频简介
-        vod_content = data('.entry-content p').text().strip() if data('.entry-content p') else ''
-        # 日期
-        vod_year = data('.entry-date').text().strip() if data('.entry-date') else ''
-        # 分类标签
-        vod_tag_elem = data('.entry-categories a, .post-categories a')
-        vod_tag = ', '.join([tag.text().strip() for tag in vod_tag_elem.items() if tag.text().strip()]) if vod_tag_elem else ''
+        
+        title = data('h1').text().strip()
+        info_text = data('.entry-meta, .post-meta').text().strip() or ''
+        views_text = data('text:contains("views")').parent().text().strip() or ''
+        tags = [tag.text().strip() for tag in data('.entry-tags a, .post-tags a, a[href*="/tag/"]').items() if tag.text().strip()]
 
         iframe_src = data('iframe').attr('src') or ''
         if not iframe_src:
@@ -147,17 +146,24 @@ class Spider(Spider):
                 if iframe_src:
                     break
         if not iframe_src:
-            iframe_src = url
+            scripts = data('script')
+            for script in scripts.items():
+                script_text = script.text()
+                if script_text and 'iframe' in script_text and 'src' in script_text:
+                    iframe_match = re.search(r'iframe.*?src=["\'](https?://[^"\']+mivalyo\.com[^"\']*)["\']', script_text, re.I)
+                    if iframe_match:
+                        iframe_src = iframe_match.group(1)
+                        break
         if not iframe_src.startswith('http'):
             iframe_src = urljoin(self.host, iframe_src)
 
         vod_play_url = b64encode(iframe_src.encode('utf-8')).decode('utf-8')
+        vod_content = ' | '.join(filter(None, [f"信息: {info_text}" if info_text else '', f"观看: {views_text}" if views_text else '', f"标签: {', '.join(tags)}" if tags else '']))
+
         vod = {
             'vod_name': title,
-            'vod_pic': data('article img').attr('src') or '',
-            'vod_year': vod_year,
             'vod_content': vod_content,
-            'vod_remarks': vod_tag,
+            'vod_tag': ', '.join(tags) if tags else "GayVidsClub",
             'vod_play_from': 'Push',
             'vod_play_url': f'播放${vod_play_url}'
         }
