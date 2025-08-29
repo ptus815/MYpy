@@ -12,6 +12,16 @@
             "timeout": 60
         },
         {
+            "key": "GayCock4U",
+            "name": "GayCock4U",
+            "type": 3,
+            "api": "https://raw.githubusercontent.com/ptus815/PQ/refs/heads/main/plugin/adult/GayCock4U.py",
+            "searchable": 1,
+            "quickSearch": 1,
+            "filterable": 0,
+            "timeout": 60
+        },
+        {
             "key": "push_agent",
             "name": "Push",
             "type": 3,
