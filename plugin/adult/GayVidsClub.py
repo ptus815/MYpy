@@ -295,9 +295,3 @@ class Spider(Spider):
         if data and self.proxies:
             return f"{self.getProxyUrl()}&url={self.e64(data)}&type={type}"
         return data
-
-if __name__ == "__main__":
-    spider = Spider()
-    spider.init()
-    result = spider.detailContent(['https://gayvidsclub.com/all-gay-porn/ryuga-vs-junya-hatsutai-sex/'])
-    print(json.dumps(result, indent=2, ensure_ascii=False))
