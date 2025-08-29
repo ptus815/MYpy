@@ -4,15 +4,11 @@ import json
 import sys
 from urllib.parse import urljoin, urlparse
 from base64 import b64encode, b64decode
-
 import requests
 from pyquery import PyQuery as pq
-
 sys.path.append('..')
 from base.spider import Spider
-
 class Spider(Spider):
-
     def __init__(self, extend=""):
         try:
             self.extend = json.loads(extend) if extend else {}
@@ -166,8 +162,8 @@ class Spider(Spider):
             matches = re.findall(r'<iframe[^>]*src=["\'](https?://d-s\.io/[^"\']+)["\']', resp.text, re.IGNORECASE)
             if matches:
                 iframe_src = matches[0]
-                if iframe_src and not iframe_src.startswith('http'):
-                    iframe_src = urljoin(self.host, iframe_src)
+            if iframe_src and not iframe_src.startswith('http'):
+                iframe_src = urljoin(self.host, iframe_src)
 
             vod_play_url = self.e64(iframe_src or url)
             vod_content = ' | '.join(filter(None, [info_text]))
@@ -197,60 +193,76 @@ class Spider(Spider):
             self.log(f"搜索失败: {str(e)}")
             return {'list': []}
 
-def playerContent(self, flag, id, vipFlags):
-    url = self.d64(id)
-    headers = {
-        'User-Agent': self.headers['User-Agent'],
-        'Referer': self.host,
-        'Accept': 'video/*,*/*;q=0.9',
-    }
+        def playerContent(self, flag, id, vipFlags):
+        url = self.d64(id)
+        headers = {
+            'User-Agent': self.headers['User-Agent'],
+            'Referer': self.host,
+            'Accept': 'video/*,*/*;q=0.9',
+        }
 
-    
-    if 'd-s.io' in url:
-        try:
-            
-            resp = self.session.get(url, headers=headers, timeout=30)
-            resp.raise_for_status()
+        # 嗅探 iframe 逻辑
+        if 'd-s.io' in url:
+            try:
+                # 发起请求以获取 iframe 页面
+                resp = self.session.get(url, headers=headers, timeout=30)
+                resp.raise_for_status()
 
-            
-            match = re.search(r'<video.*?src="([^"]*)"', resp.text)
-            if match:
-                video_url = match.group(1).replace('&amp;', '&')  # 清理 URL 中的转义符
-                return {'parse': 0, 'url': video_url, 'header': headers}
-
-            
-            api_url = self.getApiUrlFromIframe(url)  # 使用 helper 方法生成 API 请求 URL
-            if api_url:
-                resp_api = self.session.get(api_url, headers=headers, timeout=30)
-                resp_api.raise_for_status()
-                
-             
-                video_data = resp_api.json()
-                video_url = video_data.get('video_url', '')
-                if video_url:
+                # 提取视频源地址
+                match = re.search(r'<video.*?src="([^"]*)"', resp.text)
+                if match:
+                    video_url = match.group(1).replace('&amp;', '&')  # 处理 HTML 实体
                     return {'parse': 0, 'url': video_url, 'header': headers}
+                else:
+                    # 如果没有直接的 <video> 标签，尝试通过 XHR 获取真正的播放链接
+                    xhr_url = self._get_real_video_url_from_xhr(url)
+                    if xhr_url:
+                        return {'parse': 0, 'url': xhr_url, 'header': headers}
+                    else:
+                        return {'parse': 1, 'url': url, 'header': headers}  # 无法解析，返回原始 URL
+            except Exception as e:
+                self.log(f"Push解析失败，尝试XHR获取视频失败: {str(e)}")
+                return {'parse': 1, 'url': url, 'header': headers}
+        
+        # 如果 URL 不是 iframe 类型，直接返回 URL
+        return {'parse': 1, 'url': url, 'header': headers}
 
+    def _get_real_video_url_from_xhr(self, iframe_src):
+        """
+        尝试通过发送 XHR 请求获取真正的视频 URL（MP4/M3U8）
+        """
+        try:
+            # 模拟浏览器请求，构建 XHR 请求的 headers 和参数
+            params = {
+                'op': 'watch',
+                'hash': '223543660-185-71-1756449288-13317439475d9c23cf5f058dc2a980e1',  # 可从页面解析得到
+                'token': 'pvmn8l25ruqv44owkambhemu',  # 可从页面解析得到
+                'embed': '1',
+                'ref2': self.host,
+                'adb': '0',
+                'ftor': '0'
+            }
+            headers = {
+                'User-Agent': self.headers['User-Agent'],
+                'Referer': iframe_src,
+                'Accept': '*/*',
+                'Accept-Encoding': 'gzip, deflate, br, zstd',
+                'Accept-Language': 'zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2',
+                'Connection': 'keep-alive',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+
+            # 发送 XHR 请求
+            xhr_resp = self.session.get(f"https://d-s.io/dood?{urlencode(params)}", headers=headers, timeout=30)
+            xhr_resp.raise_for_status()
+
+            # 从 XHR 响应中提取视频 URL
+            json_data = xhr_resp.json()
+            if 'video_url' in json_data:
+                return json_data['video_url']  # 返回视频的 URL
+            else:
+                self.log(f"XHR请求失败，未返回有效的视频链接: {xhr_resp.text}")
+                return None
         except Exception as e:
-            self.log(f"Push 解析失败，错误信息: {str(e)}")
-
-
-    return {'parse': 1, 'url': url, 'header': headers}
-
-def getApiUrlFromIframe(self, iframe_url):
-  
-    api_base = "https://d-s.io/dood?op=watch"
-  
-    hash_token = self.extractHashTokenFromIframe(iframe_url)
-    if hash_token:
-        api_url = f"{api_base}&hash={hash_token['hash']}&token={hash_token['token']}&embed=1"
-        return api_url
-    return None
-
-def extractHashTokenFromIframe(self, iframe_url):
-   
-    pattern = r"hash=([a-zA-Z0-9]+)&token=([a-zA-Z0-9]+)"
-    match = re.search(pattern, iframe_url)
-    if match:
-        return {'hash': match.group(1), 'token': match.group(2)}
-    return None
-
+            self.log(f"XHR获取视频URL失败: {str(e)}")
+            return None
