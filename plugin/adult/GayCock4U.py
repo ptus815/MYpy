@@ -2,7 +2,7 @@
 import re
 import json
 import sys
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, urlencode
 from base64 import b64encode, b64decode
 
 import requests
@@ -13,7 +13,8 @@ from base.spider import Spider
 
 class Spider(Spider):
 
-    def init(self, extend=""):
+    def __init__(self, extend=""):
+        super().__init__(extend)  
         try:
             self.extend = json.loads(extend) if extend else {}
         except:
@@ -98,7 +99,7 @@ class Spider(Spider):
                 if vod_pic and not vod_pic.startswith('http'):
                     vod_pic = urljoin(self.host, vod_pic)
 
-                # 视频时长 / 分类信息
+               
                 vod_remarks = article('.video-info, .video-duration, [class*="duration"]').text().strip() or ''
                 vod_year = ''
 
@@ -161,7 +162,7 @@ class Spider(Spider):
             # 简介
             info_text = doc('.entry-meta, .post-meta').text().strip() or ''
 
-            # iframe 播放源
+          
             iframe_src = None
             matches = re.findall(r'<iframe[^>]*src=["\'](https?://d-s\.io/[^"\']+)["\']', resp.text, re.IGNORECASE)
             if matches:
@@ -194,29 +195,36 @@ class Spider(Spider):
             vlist = self.getlist(articles)
             return {'list': vlist, 'page': pg, 'pagecount': 9999, 'limit': 90, 'total': 999999}
         except Exception as e:
-            self.log(f"搜索失败: {str(e)}")
-            return {'list': []}
+            self.log(f"搜索失败: {str(e)}")  
+            return {'list': []}  
 
-    def playerContent(self, flag, id, vipFlags):
-        url = self.d64(id)
-        headers = {
-            'User-Agent': self.headers['User-Agent'],
-            'Referer': self.host,
-            'Accept': 'video/*,*/*;q=0.9',
-        }
+def playerContent(self, flag, id, vipFlags):
+    url = self.d64(id)
+    
+    
+    referer_url = url  
+    
+    headers = {
+        'User-Agent': self.headers['User-Agent'],
+        'Referer': referer_url,  
+        'Accept': 'video/*,*/*;q=0.9', 
+        'Accept-Encoding': 'gzip, deflate, br',  
+        'Connection': 'keep-alive',  
+    }
 
-        # 嗅探 iframe 逻辑
-        if 'd-s.io' in url:
-            try:
-                resp = self.session.get(url, headers=headers, timeout=30)
-                resp.raise_for_status()
-                match = re.search(r'<video.*?src="([^"]*)"', resp.text)
-                if match:
-                    video_url = match.group(1).replace('&amp;', '&')
-                    return {'parse': 0, 'url': video_url, 'header': headers}
-                else:
-                    return {'parse': 1, 'url': url, 'header': headers}
-            except Exception:
+
+    if 'd-s.io' in url:
+        try:
+            resp = self.session.get(url, headers=headers, timeout=30)
+            resp.raise_for_status()
+            match = re.search(r'<video.*?src="([^"]*)"', resp.text)
+            if match:
+                video_url = match.group(1).replace('&amp;', '&')
+                return {'parse': 0, 'url': video_url, 'header': headers}
+            else:
                 return {'parse': 1, 'url': url, 'header': headers}
+        except Exception:
+            return {'parse': 1, 'url': url, 'header': headers}
 
-        return {'parse': 1, 'url': url, 'header': headers}
+    return {'parse': 1, 'url': url, 'header': headers}
+ 
