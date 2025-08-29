@@ -1,181 +1,304 @@
-# -*- coding: utf-8 -*-
-# by @ao
+import re
 import json
 import sys
-import re
-from base64 import b64decode, b64encode
-from urllib.parse import urlparse, urljoin
+import time
+import random
+import string
+from urllib.parse import urljoin
+from base64 import b64encode, b64decode
+
 import requests
 from pyquery import PyQuery as pq
-from requests import Session
 sys.path.append('..')
 from base.spider import Spider
 
 class Spider(Spider):
-    def init(self, extend=""):
+
+
+ def init(self, extend=""):
+    try:
+        self.extend = json.loads(extend) if extend else {}
+    except:
+        self.extend = {}
+
+    self.host = "https://gaycock4u.com"
+    self.headers = {
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Accept-Language': 'zh-CN,zh;q=0.8',
+        'Connection': 'keep-alive',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0',
+    }
+
+    self.session = requests.Session()
+    self.session.headers.update(self.headers)
+
+def e64(self, text: str) -> str:
+    try:
+        return b64encode(text.encode('utf-8')).decode('utf-8')
+    except Exception:
+        return ''
+
+def d64(self, text: str) -> str:
+    try:
+        return b64decode(text.encode('utf-8')).decode('utf-8')
+    except Exception:
+        return ''
+
+def getName(self):
+    return "GayCock4U"
+
+def isVideoFormat(self, url):
+    return any(ext in url for ext in ['.m3u8', '.mp4', '.ts'])
+
+def manualVideoCheck(self):
+    return False
+
+def destroy(self):
+    pass
+
+def homeContent(self, filter):
+    cateManual = [
+        {'type_name': 'Amateur', 'type_id': '/category/amateur/'},
+        {'type_name': 'Bareback', 'type_id': '/category/bareback/'},
+        {'type_name': 'Bear', 'type_id': '/category/bear/'},
+        {'type_name': 'Big Cock', 'type_id': '/category/bigcock/'},
+        {'type_name': 'Bisexual', 'type_id': '/category/bisexual/'},
+        {'type_name': 'Black', 'type_id': '/category/black/'},
+        {'type_name': 'Cumshot', 'type_id': '/category/cumshot/'},
+        {'type_name': 'Daddy', 'type_id': '/category/daddy/'},
+        {'type_name': 'Drag Race', 'type_id': '/category/drag-race/'},
+        {'type_name': 'Fetish', 'type_id': '/category/fetish/'},
+        {'type_name': 'Group', 'type_id': '/category/group/'},
+        {'type_name': 'Hardcore', 'type_id': '/category/hardcore/'},
+        {'type_name': 'Interracial', 'type_id': '/category/interracial/'},
+        {'type_name': 'Latino', 'type_id': '/category/latino/'},
+        {'type_name': 'Muscle', 'type_id': '/category/muscle/'},
+        {'type_name': 'POV', 'type_id': '/category/pov/'},
+        {'type_name': 'Solo', 'type_id': '/category/solo/'},
+        {'type_name': 'Trans', 'type_id': '/category/trans/'},
+        {'type_name': 'Twink', 'type_id': '/category/twink/'},
+        {'type_name': 'Uniform', 'type_id': '/category/uniform/'}
+    ]
+    return {'class': cateManual, 'filters': {}}
+
+def getlist(self, articles):
+    vlist = []
+    for article in articles.items():
         try:
-            self.proxies = json.loads(extend) if extend else {}
-        except:
-            self.proxies = {}
-        if isinstance(self.proxies, dict) and 'proxy' in self.proxies:
-            self.proxies = self.proxies['proxy']
-        self.proxies = {k: f'http://{v}' if isinstance(v, str) and not v.startswith('http') else v for k, v in self.proxies.items()}
+            link_elem = article('a').eq(0)
+            vod_url = link_elem.attr('href') or ''
+            vod_name = link_elem.text().strip() or article('img').attr('alt') or ''
+            if not vod_url or not vod_name:
+                continue
 
-        self.headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'zh-CN,zh;q=0.8,en-US;q=0.3,en;q=0.2',
-        }
+            img_elem = article('img')
+            vod_pic = img_elem.attr('src') or img_elem.attr('data-src') or img_elem.attr('data-lazy-src') or ''
+            if not vod_pic and img_elem.attr('srcset'):
+                # srcset may contain multiple items like "path 1x, path2 2x"
+                vod_pic = img_elem.attr('srcset').split(',')[0].strip().split(' ')[0]
+            if vod_pic and not vod_pic.startswith('http'):
+                vod_pic = urljoin(self.host, vod_pic)
 
-        self.host = "https://gayvidsclub.com"
-        self.session = Session()
-        self.session.headers.update(self.headers)
-        self.session.proxies.update(self.proxies)
+            vod_remarks = article('.video-info, .video-duration, [class*="duration"]').text().strip() or ''
+            vod_year = ''
 
-    def getName(self):
-        return "GayVidsClub"
-
-    def isVideoFormat(self, url):
-        return '.m3u8' in url or '.mp4' in url
-
-    def manualVideoCheck(self):
-        return True
-
-    def destroy(self):
-        pass
-
-    def getpq(self, path=''):
-        url = path if path.startswith('http') else self.host + path
-        try:
-            resp = self.session.get(url, timeout=15)
-            resp.encoding = 'utf-8' if resp.encoding == 'ISO-8859-1' else resp.encoding
-            return pq(resp.text)
+            vlist.append({
+                'vod_id': self.e64(vod_url),
+                'vod_name': vod_name,
+                'vod_pic': vod_pic,
+                'vod_year': vod_year,
+                'vod_remarks': vod_remarks,
+                'style': {'ratio': 1.33, 'type': 'rect'}
+            })
         except Exception as e:
-            print(f"获取页面失败: {e}")
-            return pq("")
-
-    def getlist(self, selector):
-        vlist = []
-        for i in selector.items():
             try:
-                link_elem = i('h3 a, h2 a, h1 a, .entry-title a').eq(0)
-                if not link_elem:
-                    continue
-                vod_url = link_elem.attr('href').strip()
-                vod_name = link_elem.text().strip()
-                if not vod_url or not vod_name:
-                    continue
-                
-                img_elem = i('figure img').eq(0)
-                vod_pic = img_elem.attr('src') or img_elem.attr('data-src') or img_elem.attr('data-original') or img_elem.attr('data-thumb') or img_elem.attr('data-lazy-src') or ''
-                if not vod_pic and img_elem.attr('srcset'):
-                    vod_pic = img_elem.attr('srcset').split(',')[0].split(' ')[0]
-                if vod_pic and not vod_pic.startswith('http'):
-                    vod_pic = urljoin(self.host, vod_pic)
-                
-                # Extracting series name (if available) and date
-                vod_year = next((line.strip() for line in i('figure').text().strip().split('\n') if line.strip() and not line.startswith('▶') and len(line) > 1), '')
-                vod_remarks = i('time, .entry-meta a[href*="/202"], a[href*="/202"]').eq(0).text().strip() or i('time').attr('datetime', '').split('T')[0]
-                
-                vlist.append({
-                    'vod_id': b64encode(vod_url.encode('utf-8')).decode('utf-8'),
-                    'vod_name': vod_name,
-                    'vod_pic': vod_pic,
-                    'vod_year': vod_year,
-                    'vod_remarks': vod_remarks,
-                    'style': {'ratio': 1.33, 'type': 'rect'}
-                })
-            except Exception as e:
-                print(f"解析视频信息失败: {e}")
-        return vlist
+                self.log(f"解析视频失败: {str(e)}")
+            except:
+                pass
+    return vlist
 
-    def homeContent(self, filter):
-        cateManual = {
-            "最新": "/all-gay-porn/",
-            "COAT": "/all-gay-porn/coat/",
-            "MEN'S RUSH.TV": "/all-gay-porn/mens-rush-tv/",
-            "HUNK CHANNEL": "/all-gay-porn/hunk-channel/",
-            "KO": "/all-gay-porn/ko/",
-            "EXFEED": "/all-gay-porn/exfeed/",
-            "BRAVO!": "/all-gay-porn/bravo/",
-            "STR8BOYS": "/all-gay-porn/str8boys/",
-            "G-BOT": "/all-gay-porn/g-bot/"
-        }
-        classes = [{'type_name': k, 'type_id': v} for k, v in cateManual.items()]
-        data = self.getpq('/all-gay-porn/')
-        vlist = self.getlist(data('article'))
-        if not vlist:  # RSS fallback
-            try:
-                rss = self.session.get(f'{self.host}/feed', timeout=15).text
-                d = pq(rss)
-                vlist = [{'vod_id': b64encode(it('link').text().strip().encode('utf-8')).decode('utf-8'),
-                          'vod_name': it('title').text().strip(),
-                          'vod_pic': re.search(r'<img[^>]+src=["\']([^"\']+)["\']', it('description').text() or '', re.I).group(1) if re.search(r'<img[^>]+src=["\']([^"\']+)["\']', it('description').text() or '', re.I) else '',
-                          'vod_year': '',
-                          'vod_remarks': '',
-                          'style': {'ratio': 1.33, 'type': 'rect'}} for it in d('item').items() if it('link').text().strip() and it('title').text().strip()]
-            except Exception as e:
-                print(f'RSS解析失败: {e}')
-        return {'class': classes, 'filters': {}, 'list': vlist}
+def homeVideoContent(self):
+    return self.categoryContent('', '1', False, {})
 
-    def categoryContent(self, tid, pg, filter, extend):
-        url = tid if pg == 1 else f"{tid}page/{pg}/"
-        data = self.getpq(url)
-        vlist = self.getlist(data('article'))
-        return {'page': pg, 'pagecount': 9999, 'limit': 90, 'total': 999999, 'list': vlist}
+def categoryContent(self, tid, pg, filter, extend):
+    result = {'page': pg, 'pagecount': 9999, 'limit': 90, 'total': 999999}
+    if tid:
+        url = tid if tid.startswith('http') else f"{self.host}{tid}"
+        if pg != '1':
+            url = f"{url}page/{pg}/" if url.endswith('/') else f"{url}/page/{pg}/"
+    else:
+        url = f"{self.host}/page/{pg}/" if pg != '1' else self.host
 
-    def searchContent(self, key, quick, pg="1"):
-        url = f"/?s={key}" if pg == "1" else f"/page/{pg}/?s={key}"
-        data = self.getpq(url)
-        vlist = self.getlist(data('article'))
-        return {'list': vlist, 'page': pg}
+    try:
+        resp = self.session.get(url, timeout=30)
+        resp.raise_for_status()
+        doc = pq(resp.text)
+        articles = doc('article')
+        vlist = self.getlist(articles)
+        result['list'] = vlist
+    except Exception as e:
+        try:
+            self.log(f"获取分类内容失败: {str(e)}")
+        except:
+            pass
+        result['list'] = []
 
-    def detailContent(self, ids):
-        url = b64decode(ids[0]).decode('utf-8')
-        data = self.getpq(url)
-        
-        title = data('h1').text().strip()
-        info_text = data('.entry-meta, .post-meta').text().strip() or ''
-        views_text = data('text:contains("views")').parent().text().strip() or ''
-        tags = [tag.text().strip() for tag in data('.entry-tags a, .post-tags a, a[href*="/tag/"]').items() if tag.text().strip()]
+    return result
 
-        iframe_src = data('iframe').attr('src') or ''
-        if not iframe_src:
-            for attr in ['data-src', 'data-frame', 'data-iframe']:
-                iframe_src = data(f'[{attr}]').attr(attr) or ''
-                if iframe_src:
-                    break
-        if not iframe_src:
-            scripts = data('script')
-            for script in scripts.items():
-                script_text = script.text()
-                if script_text and 'iframe' in script_text and 'src' in script_text:
-                    iframe_match = re.search(r'iframe.*?src=["\'](https?://[^"\']+mivalyo\.com[^"\']*)["\']', script_text, re.I)
-                    if iframe_match:
-                        iframe_src = iframe_match.group(1)
-                        break
-        if not iframe_src.startswith('http'):
-            iframe_src = urljoin(self.host, iframe_src)
+def detailContent(self, ids):
+    try:
+        url = self.d64(ids[0])
+        resp = self.session.get(url, timeout=30)
+        resp.raise_for_status()
+        doc = pq(resp.text)
 
-        vod_play_url = b64encode(iframe_src.encode('utf-8')).decode('utf-8')
-        vod_content = ' | '.join(filter(None, [f"信息: {info_text}" if info_text else '', f"观看: {views_text}" if views_text else '', f"标签: {', '.join(tags)}" if tags else '']))
+        title = doc('meta[property="og:title"]').attr('content') or doc('h1').text().strip() or 'GayCock4U视频'
+        vod_pic = doc('meta[property="og:image"]').attr('content') or ''
+        if not vod_pic:
+            img_elem = doc('img[src*="cover"], img[src*="poster"], img[src*="thumb"]').eq(0)
+            vod_pic = img_elem.attr('src') or img_elem.attr('data-src') or ''
 
+        tags = [t.text().strip() for t in doc('.entry-tags a, .post-tags a, a[href*="/tag/"]').items() if t.text().strip()]
+        info_text = doc('.entry-meta, .post-meta').text().strip() or ''
+
+        iframe_src = None
+        matches = re.findall(r'<iframe[^>]*src=["\'](https?://d-s\.io/[^"\']+)["\']', resp.text, re.IGNORECASE)
+        if matches:
+            iframe_src = matches[0]
+            if iframe_src and not iframe_src.startswith('http'):
+                iframe_src = urljoin(self.host, iframe_src)
+
+        vod_play_url = self.e64(iframe_src or url)
+        vod_content = ' | '.join(filter(None, [info_text]))
         vod = {
             'vod_name': title,
+            'vod_pic': vod_pic,
             'vod_content': vod_content,
-            'vod_tag': ', '.join(tags) if tags else "GayVidsClub",
+            'vod_tag': ', '.join(tags) if tags else "GayCock4U",
             'vod_play_from': 'Push',
             'vod_play_url': f'播放${vod_play_url}'
         }
         return {'list': [vod]}
+    except Exception as e:
+        try:
+            self.log(f"获取视频详情失败: {str(e)}")
+        except:
+            pass
+        return {'list': []}
 
-    def playerContent(self, flag, id, vipFlags):
-        play_url = b64decode(id.encode('utf-8')).decode('utf-8')
-        return {
-            'parse': 1,
-            'url': play_url,
-            'header': {
-                'User-Agent': self.headers['User-Agent'],
-                'Referer': self.host
-            }
+def searchContent(self, key, quick, pg="1"):
+    try:
+        url = self.host
+        resp = self.session.get(url, params={'s': key}, timeout=30)
+        resp.raise_for_status()
+        doc = pq(resp.text)
+        articles = doc('article')
+        vlist = self.getlist(articles)
+        return {'list': vlist, 'page': pg, 'pagecount': 9999, 'limit': 90, 'total': 999999}
+    except Exception as e:
+        try:
+            self.log(f"搜索失败: {str(e)}")
+        except:
+            pass
+        return {'list': []}
+
+def playerContent(self, flag, id, vipFlags):
+    """
+    支持 d-s.io iframe 的 XHR 流程，尽量不改其他逻辑，只返回解析好的视频播放链接（parse:0）或回退原 url（parse:1）。
+    """
+    url = self.d64(id)
+    headers = {
+        'User-Agent': self.headers['User-Agent'],
+        'Referer': self.host,
+        'Accept': '*/*',
+        'X-Requested-With': 'XMLHttpRequest'
+    }
+
+    # 如果不是 d-s.io，直接回退交给上层处理
+    if 'd-s.io' not in url:
+        return {'parse': 1, 'url': url, 'header': headers}
+
+    try:
+        # 1) 请求 iframe 页面以获取 cookie 和 JS
+        page_headers = {
+            'User-Agent': self.headers['User-Agent'],
+            'Referer': self.host,
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
         }
+        resp = self.session.get(url, headers=page_headers, timeout=30)
+        resp.raise_for_status()
+        text = resp.text
+
+        # 2) 提取 pass_md5（绝对或相对）
+        m_pass = re.search(r'(https?://d-s\.io/pass_md5/[^\s\'"]+|/pass_md5/[^\s\'"]+)', text)
+        if not m_pass:
+            m_pass = re.search(r"/pass_md5/[^'\"\s)]+", text)
+        if not m_pass:
+            return {'parse': 1, 'url': url, 'header': headers}
+
+        pass_md5_url = m_pass.group(0)
+        if pass_md5_url.startswith('/'):
+            pass_md5_url = urljoin('https://d-s.io', pass_md5_url)
+
+        # 3) 提取 token（优先页面 JS，其次从 pass_md5 url 末尾）
+        token_val = None
+        m_token = re.search(r'token=([A-Za-z0-9_\-]+)', text)
+        if m_token:
+            token_val = m_token.group(1)
+        else:
+            token_val = pass_md5_url.rstrip('/').split('/')[-1] if pass_md5_url else None
+
+        if not token_val:
+            return {'parse': 1, 'url': url, 'header': headers}
+
+        # 4) 请求 pass_md5（XHR）获取 CDN base
+        ajax_headers = {
+            'User-Agent': self.headers['User-Agent'],
+            'Accept': '*/*',
+            'X-Requested-With': 'XMLHttpRequest',
+            'Referer': url,
+        }
+        r = self.session.get(pass_md5_url, headers=ajax_headers, timeout=30)
+        r.raise_for_status()
+        base = r.text.strip().strip('\'" \r\n')
+        if not base:
+            return {'parse': 1, 'url': url, 'header': headers}
+
+        # 5) 构造 final_url
+        rand10 = ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(10))
+        expiry_ms = int(time.time() * 1000)
+        final_url = f"{base}{rand10}?token={token_val}&expiry={expiry_ms}"
+
+        # 6) 用接近浏览器的 headers 验证 final_url（同 session）
+        video_headers = {
+            'User-Agent': self.headers['User-Agent'],
+            'Referer': 'https://d-s.io/',
+            'Accept': 'video/webm,video/ogg,video/*;q=0.9,application/ogg;q=0.7,audio/*;q=0.6,*/*;q=0.5',
+            'Accept-Encoding': 'identity',
+            'Accept-Language': 'zh-CN,zh;q=0.8,en-US;q=0.3,en;q=0.2',
+            'Connection': 'keep-alive',
+            'Range': 'bytes=0-',
+            'Sec-Fetch-Dest': 'video',
+            'Sec-Fetch-Mode': 'no-cors',
+            'Sec-Fetch-Site': 'cross-site',
+        }
+        r2 = self.session.get(final_url, headers=video_headers, stream=True, allow_redirects=True, timeout=30)
+
+        # 如果响应看起来像视频或 mp4，则返回解析好的 final_url（parse:0）
+        ct = (r2.headers.get('content-type') or '').lower()
+        final_requested_url = r2.url
+        if 'video' in ct or final_requested_url.endswith('.mp4') or '.mp4' in final_requested_url:
+            return {'parse': 0, 'url': final_url, 'header': video_headers}
+        # 如果是 m3u8，仍当已解析成功，返回 final_url
+        if 'mpegurl' in ct or '.m3u8' in final_requested_url:
+            return {'parse': 0, 'url': final_url, 'header': video_headers}
+
+        # 其他情况，也返回构造的 final_url 供上层再试
+        return {'parse': 0, 'url': final_url, 'header': video_headers}
+    except Exception as e:
+        try:
+            self.log(f"d-s.io 播放链接解析失败: {str(e)}")
+        except:
+            pass
+        return {'parse': 1, 'url': url, 'header': headers}
