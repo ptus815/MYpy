@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# by @ao
+# by @嗷吾der
 import json
 import sys
 import re
@@ -53,16 +53,42 @@ class Spider(Spider):
         except Exception as e:
             print(f"获取页面失败: {e}")
             return pq("")
+    
+    def is_valid_video_url(self, url):
+        
+        if not url:
+            return False
+        
+        
+        ad_domains = ['cam4.com', 'landers.cam4.com', 'juicyads.com', 'adultfriendfinder.com', 
+                     'livejasmin.com', 'chaturbate.com', 'myfreecams.com', 'stripchat.com']
+        if any(domain in url.lower() for domain in ad_domains):
+            return False
+        
+        
+        ad_paths = ['/ads/', '/ad/', '/banner/', '/sponsor/', '/promo/', '/affiliate/', 
+                   '/click/', '/track/', '/redirect/']
+        if any(path in url.lower() for path in ad_paths):
+            return False
+        
+       
+        if url.startswith('http') and self.host not in url:
+            
+            trusted_domains = ['youtube.com', 'vimeo.com', 'dailymotion.com']
+            if not any(domain in url.lower() for domain in trusted_domains):
+                return False
+        
+        return True
 
     def getlist(self, selector):
         vlist = []
         for i in selector.items():
             try:
-                # 过滤广告元素
+                
                 if i('iframe').length > 0 or 'Ad' in i.text() or 'ad' in i.text():
                     continue
                 
-                # 获取视频链接和标题
+                
                 link_elem = i('a').eq(0)
                 if not link_elem:
                     continue
@@ -71,11 +97,20 @@ class Spider(Spider):
                 if not vod_url or not vod_name:
                     continue
                 
-                # 过滤掉非视频链接
-                if not vod_url.startswith('/') and not vod_url.startswith('http'):
+                
+                if not self.is_valid_video_url(vod_url):
                     continue
                 
-                # 获取图片
+                # 过滤掉过短的标题（可能是广告）
+                if len(vod_name) < 15:
+                    continue
+                
+                
+                ad_keywords = ['ad', 'advertisement', 'sponsored', 'promo', 'banner', 'click here', 'visit now']
+                if any(keyword in vod_name.lower() for keyword in ad_keywords):
+                    continue
+                
+                
                 img_elem = i('img').eq(0)
                 vod_pic = img_elem.attr('src') or img_elem.attr('data-src') or img_elem.attr('data-original') or img_elem.attr('data-thumb') or img_elem.attr('data-lazy-src') or ''
                 if not vod_pic and img_elem.attr('srcset'):
@@ -83,7 +118,11 @@ class Spider(Spider):
                 if vod_pic and not vod_pic.startswith('http'):
                     vod_pic = urljoin(self.host, vod_pic)
                 
-                # 获取时长和评分
+                
+                if vod_pic and not self.is_valid_video_url(vod_pic):
+                    vod_pic = ''
+                
+                
                 duration_elem = i('div').filter(lambda idx, elem: ':' in pq(elem).text() and len(pq(elem).text().strip()) <= 10).eq(0)
                 vod_remarks = duration_elem.text().strip() if duration_elem else ''
                 
@@ -104,23 +143,26 @@ class Spider(Spider):
         return vlist
 
     def homeContent(self, filter):
-        # 从页面底部获取分类信息
+        
         cateManual = {
             "最新": "/", 
+            "推荐": "/?filtre=popular",
             "Lucast": "/category/589476/",
             "Asian": "/category/asian-guys-porn/",
             "MEN": "/category/286935/",
             "MAP": "/category/742158/",
             "OF": "/category/621397/",
-           
+            "Full Movies": "/category/porn-movies-214660/",
+            "Outdoor": "/category/outdoor/",
+            "Big Dicks": "/category/big-dicks/"
         }
         classes = [{'type_name': k, 'type_id': v} for k, v in cateManual.items()]
         
-        # 获取首页视频列表 - 只选择特定区域的视频
+        
         data = self.getpq('/')
-        # 选择 "Latest videos" 和 "Latest Movies" 区域的视频
-        latest_videos = data('div:contains("Latest videos")').next('ul li')
-        latest_movies = data('div:contains("Latest Movies")').next('ul li')
+        # 选择 "Latest videos" 和 "Latest Movies" 区域的视频，排除广告
+        latest_videos = data('div:contains("Latest videos")').next('ul li').not_(':contains("Ad")').not_(':contains("ad")')
+        latest_movies = data('div:contains("Latest Movies")').next('ul li').not_(':contains("Ad")').not_(':contains("ad")')
         
         vlist = []
         vlist.extend(self.getlist(latest_videos))
@@ -131,14 +173,14 @@ class Spider(Spider):
     def categoryContent(self, tid, pg, filter, extend):
         url = tid if pg == 1 else f"{tid}page/{pg}/"
         data = self.getpq(url)
-        # 选择主要内容区域的视频列表
+        
         vlist = self.getlist(data('ul li').not_(':contains("Ad")').not_(':contains("ad")'))
         return {'page': pg, 'pagecount': 9999, 'limit': 90, 'total': 999999, 'list': vlist}
 
     def searchContent(self, key, quick, pg="1"):
         url = f"/?s={key}" if pg == "1" else f"/page/{pg}/?s={key}"
         data = self.getpq(url)
-        # 选择搜索结果区域的视频列表，排除广告
+        
         vlist = self.getlist(data('ul li').not_(':contains("Ad")').not_(':contains("ad")'))
         return {'list': vlist, 'page': pg}
 
