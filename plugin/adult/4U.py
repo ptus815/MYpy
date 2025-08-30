@@ -166,7 +166,7 @@ class Spider(Spider):
                 'vod_pic': vod_pic,
                 'vod_content': vod_content,
                 'vod_tag': ', '.join(tags) if tags else "GayCock4U",
-                'vod_play_from': 'd-s.io',  # 新增的播放路线标识
+                'vod_play_from': 'd-s.io',  # 播放路线标识
                 'vod_play_url': f'播放${vod_play_url}'
             }
             return {'list': [vod]}
@@ -193,7 +193,6 @@ class Spider(Spider):
         # d-s.io 路线的解析逻辑
         if flag == 'd-s.io':
             try:
-                
                 resp_iframe = self.session.get(url, timeout=30)
                 resp_iframe.raise_for_status()
                 html_content = resp_iframe.text
@@ -204,7 +203,6 @@ class Spider(Spider):
                 pass_md5_path = match.group(1)
                 token = pass_md5_path.split('/')[-1]
 
-                
                 pass_md5_url = f"https://d-s.io{pass_md5_path}"
                 resp_base_url = self.session.get(pass_md5_url, headers={'Referer': url}, timeout=30)
                 resp_base_url.raise_for_status()
@@ -212,13 +210,11 @@ class Spider(Spider):
                 if not video_url_base:
                     raise ValueError("pass_md5 请求响应为空。")
 
-                
-                expiry_time = int(time.time()) + 3600
+                expiry_time = int(time.time() * 1000) + 3600000  # 转换为毫秒并加上一个小时
                 if video_url_base.endswith('~'):
                     video_url_base = video_url_base[:-1]
 
                 final_video_url = f"{video_url_base}?token={token}&expiry={expiry_time}"
-                
                 
                 headers = {
                     'User-Agent': self.headers['User-Agent'],
@@ -228,9 +224,11 @@ class Spider(Spider):
                 return {'parse': 0, 'url': final_video_url, 'header': headers}
 
             except Exception as e:
-                
                 self.log(f"d-s.io 解析失败: {str(e)}")
                 return {'parse': 0, 'url': '', 'header': ''}
         
-        
-        return {'parse': 1, 'url': url, 'header': {}}
+        # 通用的默认处理逻辑，用于其他非 d-s.io 的链接
+        headers = {
+            'User-Agent': self.headers['User-Agent']
+        }
+        return {'parse': 1, 'url': url, 'header': headers}
