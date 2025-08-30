@@ -50,9 +50,9 @@ class Spider(Spider):
         pass
     
     def update_cookies(self):
-        """更新Cookie以应对Cloudflare验证"""
+       
         try:
-            # 先访问首页获取新的Cookie
+            
             resp = self.session.get(self.host, timeout=15)
             if resp.status_code == 200:
                 # 提取cf_clearance cookie
@@ -98,14 +98,14 @@ class Spider(Spider):
         if not url:
             return False
         
-        # 检查是否是广告域名
+        
         ad_domains = ['cam4.com', 'landers.cam4.com', 'juicyads.com', 'adultfriendfinder.com', 
                      'livejasmin.com', 'chaturbate.com', 'myfreecams.com', 'stripchat.com',
                      'kimmy.faduz.xyz', 'kra.timbuk.online', 'ava.lazumi.online', 'wa.astorix.online']
         if any(domain in url.lower() for domain in ad_domains):
             return False
         
-        # 检查是否是广告路径
+       
         ad_paths = ['/ads/', '/ad/', '/banner/', '/sponsor/', '/promo/', '/affiliate/', 
                    '/click/', '/track/', '/redirect/']
         if any(path in url.lower() for path in ad_paths):
@@ -149,15 +149,15 @@ class Spider(Spider):
                 if len(vod_name) < 5:
                     continue
                 
-                # 过滤掉包含广告关键词的标题
+                
                 ad_keywords = ['ad', 'advertisement', 'sponsored', 'promo', 'banner', 'click here', 'visit now']
                 if any(keyword in vod_name.lower() for keyword in ad_keywords):
                     continue
                 
-                # 获取图片 - 使用更精确的选择器
+               
                 img_elem = i('img').eq(0)
                 if img_elem:
-                    # 尝试多种图片属性
+                    
                     vod_pic = (img_elem.attr('src') or 
                               img_elem.attr('data-src') or 
                               img_elem.attr('data-original') or 
@@ -172,7 +172,7 @@ class Spider(Spider):
                             # 取第一个图片URL
                             vod_pic = srcset.split(',')[0].split(' ')[0].strip()
                     
-                    # 处理相对路径
+                    
                     if vod_pic and not vod_pic.startswith('http'):
                         vod_pic = urljoin(self.host, vod_pic)
                     
@@ -214,7 +214,7 @@ class Spider(Spider):
         return vlist
 
     def homeContent(self, filter):
-        # 注意不要修改我的这些分类
+        
         cateManual = {
             "最新": "/", 
             "推荐": "/?filtre=popular",
@@ -311,3 +311,4 @@ class Spider(Spider):
                 'Referer': self.host
             }
         }
+
