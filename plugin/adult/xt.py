@@ -232,10 +232,9 @@ class Spider(Spider):
         # 获取首页视频列表 - 使用更精确的选择器
         data = self.getpq('/')
         
-        # 只选择主要内容区域的视频，排除底部分类导航
-        # 选择 "Latest videos" 区域的视频，排除 "See all" 链接
-        latest_videos = data('div:contains("Latest videos")').next('ul li').not_(':contains("See all")')
-        latest_movies = data('div:contains("Latest Movies")').next('ul li').not_(':contains("See all")')
+        # 获取所有视频列表，包括底部分类导航
+        latest_videos = data('div:contains("Latest videos")').next('ul li')
+        latest_movies = data('div:contains("Latest Movies")').next('ul li')
         
         vlist = []
         vlist.extend(self.getlist(latest_videos))
@@ -247,8 +246,8 @@ class Spider(Spider):
         url = self.host + tid + f'page/{pg}/' if pg > 1 else self.host + tid
         data = self.getpq(url)
         
-        # 获取视频列表
-        vlist = self.getlist(data('ul li:has(img):has(a):not(:contains("Ad")):not(:contains("ad")):not(:contains("See all"))'))
+        # 获取所有视频列表，包括底部分类导航
+        vlist = self.getlist(data('ul li'))
         
         return {'list': vlist, 'page': pg}
 
@@ -256,8 +255,8 @@ class Spider(Spider):
         url = self.host + f'/search/{key}/page/{pg}/'
         data = self.getpq(url)
         
-        # 获取搜索结果
-        vlist = self.getlist(data('ul li:has(img):has(a):not(:contains("Ad")):not(:contains("ad")):not(:contains("See all"))'))
+        # 获取所有搜索结果，包括底部分类导航
+        vlist = self.getlist(data('ul li'))
         
         return {'list': vlist, 'page': pg}
 
