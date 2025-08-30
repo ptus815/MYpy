@@ -27,8 +27,8 @@ class Spider(Spider):
             'Accept-Language': 'zh,zh-CN;q=0.9,en;q=0.8',
             'Connection': 'keep-alive',
             'Upgrade-Insecure-Requests': '1',
-            'sec-ch-ua-mobile': ?0,
-            'sec-ch-ua-platform:': "Android"
+            'sec-ch-ua-mobile': '?0',
+            'sec-ch-ua-platform': "Android"
             
         }
 
