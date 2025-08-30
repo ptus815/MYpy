@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# by @ao
+# by @嗷嗷嗷fan
 import json
 import sys
 import re
@@ -52,7 +52,7 @@ class Spider(Spider):
     def update_cookies(self):
         """更新Cookie以应对Cloudflare验证"""
         try:
-            # 先访问首页获取新的Cookie
+            
             resp = self.session.get(self.host, timeout=15)
             if resp.status_code == 200:
                 # 提取cf_clearance cookie
@@ -111,7 +111,7 @@ class Spider(Spider):
         if any(path in url.lower() for path in ad_paths):
             return False
         
-        # 检查是否是外部链接（非本站）
+        
         if url.startswith('http') and self.host not in url:
             # 允许一些可信的外部视频域名
             trusted_domains = ['youtube.com', 'vimeo.com', 'dailymotion.com', '74k.io', '88z.io']
@@ -128,11 +128,11 @@ class Spider(Spider):
                 if i('iframe').length > 0 or 'Ad' in i.text() or 'ad' in i.text():
                     continue
                 
-                # 过滤分类导航项 - 检查是否包含图片和链接
+                
                 if not i('img').length or not i('a').length:
                     continue
                 
-                # 获取视频链接和标题 - 使用更精确的选择器
+                
                 link_elem = i('a').eq(0)
                 if not link_elem:
                     continue
@@ -145,11 +145,11 @@ class Spider(Spider):
                 if not self.is_valid_video_url(vod_url):
                     continue
                 
-                # 过滤掉过短的标题（可能是广告）
+               
                 if len(vod_name) < 5:
                     continue
                 
-                # 过滤掉包含广告关键词的标题
+                
                 ad_keywords = ['ad', 'advertisement', 'sponsored', 'promo', 'banner', 'click here', 'visit now']
                 if any(keyword in vod_name.lower() for keyword in ad_keywords):
                     continue
@@ -184,7 +184,7 @@ class Spider(Spider):
                 else:
                     vod_pic = ''
                 
-                # 获取时长和评分 - 使用更精确的选择器
+                
                 # 查找包含时间格式的元素 (如 00:37:19)
                 duration_elem = i('div').filter(lambda idx, elem: 
                     ':' in pq(elem).text() and 
@@ -214,7 +214,7 @@ class Spider(Spider):
         return vlist
 
     def homeContent(self, filter):
-        # 注意不要修改我的这些分类
+        
         cateManual = {
             "最新": "/", 
             "推荐": "/?filtre=popular",
@@ -229,10 +229,10 @@ class Spider(Spider):
         }
         classes = [{'type_name': k, 'type_id': v} for k, v in cateManual.items()]
         
-        # 获取首页视频列表 - 使用更精确的选择器
+        
         data = self.getpq('/')
         
-        # 获取所有视频列表，包括底部分类导航
+        
         latest_videos = data('div:contains("Latest videos")').next('ul li')
         latest_movies = data('div:contains("Latest Movies")').next('ul li')
         
@@ -243,12 +243,12 @@ class Spider(Spider):
         return {'class': classes, 'filters': {}, 'list': vlist}
 
     def categoryContent(self, tid, pg, filter, extend):
-        # 将 pg 转换为整数进行比较
+        
         pg_int = int(pg) if isinstance(pg, str) else pg
         url = self.host + tid + f'page/{pg_int}/' if pg_int > 1 else self.host + tid
         data = self.getpq(url)
         
-        # 获取所有视频列表，包括底部分类导航
+        
         vlist = self.getlist(data('ul li'))
         
         return {'list': vlist, 'page': pg}
@@ -257,7 +257,7 @@ class Spider(Spider):
         url = self.host + f'/search/{key}/page/{pg}/'
         data = self.getpq(url)
         
-        # 获取所有搜索结果，包括底部分类导航
+        
         vlist = self.getlist(data('ul li'))
         
         return {'list': vlist, 'page': pg}
@@ -282,7 +282,7 @@ class Spider(Spider):
                 break
         
         if not iframe_src:
-            # 如果没有找到有效的iframe，尝试其他属性
+            
             for attr in ['data-src', 'data-frame', 'data-iframe']:
                 iframe_src = data(f'[{attr}]').attr(attr) or ''
                 if iframe_src:
@@ -313,3 +313,4 @@ class Spider(Spider):
                 'Referer': self.host
             }
         }
+
