@@ -102,7 +102,7 @@ class Spider(Spider):
                 vod_year = ''
 
                 vlist.append({
-                    'vod_id': self.e64(vod_url),
+                    'vod_id': vod_url,  # 不进行base64编码，直接使用原始URL
                     'vod_name': vod_name,
                     'vod_pic': vod_pic,
                     'vod_year': vod_year,
@@ -140,7 +140,7 @@ class Spider(Spider):
 
     def detailContent(self, ids):
         try:
-            url = self.d64(ids[0])
+            url = ids[0]  # 直接使用URL，不需要base64解码
             resp = self.session.get(url, timeout=30)
             resp.raise_for_status()
             doc = pq(resp.text)
@@ -157,20 +157,83 @@ class Spider(Spider):
             info_text = doc('.entry-meta, .post-meta').text().strip() or ''
 
             iframe_src = None
-            matches = re.findall(r'<iframe[^>]*src=["\'](https?://d-s\.io/[^"\']+)["\']', resp.text, re.IGNORECASE)
-            if matches:
-                iframe_src = matches[0]
-                if iframe_src and not iframe_src.startswith('http'):
-                    iframe_src = urljoin(self.host, iframe_src)
+            # 首先尝试查找vide0.net的iframe（这是主要的播放器）
+            vide0_patterns = [
+                r'<iframe[^>]*src=["\'](https?://vide0\.net/[^"\']+)["\']',
+                r'iframe.*?src=["\'](https?://vide0\.net/[^"\']+)["\']'
+            ]
+            
+            for pattern in vide0_patterns:
+                matches = re.findall(pattern, resp.text, re.IGNORECASE)
+                if matches:
+                    iframe_src = matches[0]
+                    self.log(f"找到vide0.net iframe: {iframe_src}")
+                    break
+            
+            # 如果没有找到vide0.net，尝试查找filemoon.to的iframe
+            if not iframe_src:
+                filemoon_patterns = [
+                    r'<iframe[^>]*src=["\'](https?://filemoon\.to/[^"\']+)["\']',
+                    r'iframe.*?src=["\'](https?://filemoon\.to/[^"\']+)["\']'
+                ]
+                
+                for pattern in filemoon_patterns:
+                    matches = re.findall(pattern, resp.text, re.IGNORECASE)
+                    if matches:
+                        iframe_src = matches[0]
+                        self.log(f"找到filemoon.to iframe: {iframe_src}")
+                        break
+            
+            # 如果没有找到filemoon.to，尝试查找d-s.io的iframe
+            if not iframe_src:
+                d_s_patterns = [
+                    r'<iframe[^>]*src=["\'](https?://d-s\.io/[^"\']+)["\']',
+                    r'iframe.*?src=["\'](https?://d-s\.io/[^"\']+)["\']'
+                ]
+                
+                for pattern in d_s_patterns:
+                    matches = re.findall(pattern, resp.text, re.IGNORECASE)
+                    if matches:
+                        iframe_src = matches[0]
+                        self.log(f"找到d-s.io iframe: {iframe_src}")
+                        break
+            
+            # 如果还是没有找到，尝试查找其他可能的播放器iframe
+            if not iframe_src:
+                other_iframes = re.findall(r'<iframe[^>]*src=["\'](https?://[^"\']+)["\']', resp.text, re.IGNORECASE)
+                if other_iframes:
+                    # 过滤掉广告iframe
+                    for iframe in other_iframes:
+                        if not any(ad_domain in iframe.lower() for ad_domain in ['adserver', 'juicyads', 'ads', 'chaseherbalpasty']):
+                            iframe_src = iframe
+                            self.log(f"找到其他播放器iframe: {iframe_src}")
+                            break
+            
+            # 如果还是没有找到，记录错误
+            if not iframe_src:
+                self.log(f"未找到iframe src，使用详情页URL: {url}")
+                iframe_src = url
 
-            vod_play_url = self.e64(iframe_src or url)
+            # 不对iframe src进行base64编码，直接传递给playerContent方法
+            vod_play_url = iframe_src
             vod_content = ' | '.join(filter(None, [info_text]))
+            
+            # 根据iframe来源设置播放路线
+            if 'vide0.net' in iframe_src:
+                vod_play_from = 'vide0.net'
+            elif 'filemoon.to' in iframe_src:
+                vod_play_from = 'filemoon.to'
+            elif 'd-s.io' in iframe_src:
+                vod_play_from = 'd-s.io'
+            else:
+                vod_play_from = 'iframe'
+            
             vod = {
                 'vod_name': title,
                 'vod_pic': vod_pic,
                 'vod_content': vod_content,
                 'vod_tag': ', '.join(tags) if tags else "GayCock4U",
-                'vod_play_from': 'd-s.io',  # 新增的播放路线标识
+                'vod_play_from': vod_play_from,
                 'vod_play_url': f'播放${vod_play_url}'
             }
             return {'list': [vod]}
@@ -192,9 +255,46 @@ class Spider(Spider):
             return {'list': []}
 
     def playerContent(self, flag, id, vipFlags):
-        url = self.d64(id)
+        url = id  # 直接使用URL，不需要base64解码
         
-        if flag == 'd-s.io':
+        if flag == 'vide0.net':
+            try:
+                # vide0.net 使用 dood 系统，需要特殊处理
+                self.log(f"处理 vide0.net iframe: {url}")
+                
+                # 设置请求头
+                headers_iframe = {
+                    'User-Agent': self.headers['User-Agent'],
+                    'Referer': self.host
+                }
+                
+                # 直接返回 iframe URL，让播放器处理
+                headers_final = {
+                    'User-Agent': self.headers['User-Agent'],
+                    'Referer': 'https://vide0.net/'
+                }
+                return {'parse': 1, 'url': url, 'header': headers_final}
+                
+            except Exception as e:
+                self.log(f"vide0.net 解析失败: {str(e)}")
+                return {'parse': 0, 'url': '', 'header': {}}
+        
+        elif flag == 'filemoon.to':
+            try:
+                # filemoon.to 直接返回 iframe URL
+                self.log(f"处理 filemoon.to iframe: {url}")
+                
+                headers_final = {
+                    'User-Agent': self.headers['User-Agent'],
+                    'Referer': 'https://filemoon.to/'
+                }
+                return {'parse': 1, 'url': url, 'header': headers_final}
+                
+            except Exception as e:
+                self.log(f"filemoon.to 解析失败: {str(e)}")
+                return {'parse': 0, 'url': '', 'header': {}}
+        
+        elif flag == 'd-s.io':
             try:
                 # 步骤 1: 请求 iframe 页面，动态提取 pass_md5 路径和 token
                 headers_iframe = {
@@ -247,8 +347,10 @@ class Spider(Spider):
                 self.log(f"d-s.io 解析失败: {str(e)}")
                 return {'parse': 0, 'url': '', 'header': {}}
         
-        # 通用的默认处理逻辑，用于其他非 d-s.io 的链接
-        headers = {
-            'User-Agent': self.headers['User-Agent']
-        }
-        return {'parse': 1, 'url': url, 'header': headers}
+        else:
+            # 通用的默认处理逻辑，用于其他 iframe 源
+            self.log(f"处理通用 iframe: {url}")
+            headers = {
+                'User-Agent': self.headers['User-Agent']
+            }
+            return {'parse': 1, 'url': url, 'header': headers}
