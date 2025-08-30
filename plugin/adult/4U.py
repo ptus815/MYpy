@@ -2,6 +2,7 @@
 import re
 import json
 import sys
+import time
 from urllib.parse import urljoin
 from base64 import b64encode, b64decode
 
@@ -92,8 +93,6 @@ class Spider(Spider):
 
                 img_elem = article('img')
                 vod_pic = img_elem.attr('src') or img_elem.attr('data-src') or img_elem.attr('data-lazy-src') or ''
-                if not vod_pic and img_elem.attr('srcset'):
-                    vod_pic = img_elem.attr('srcset').split(' ')[0]
                 if vod_pic and not vod_pic.startswith('http'):
                     vod_pic = urljoin(self.host, vod_pic)
 
@@ -167,7 +166,7 @@ class Spider(Spider):
                 'vod_pic': vod_pic,
                 'vod_content': vod_content,
                 'vod_tag': ', '.join(tags) if tags else "GayCock4U",
-                'vod_play_from': 'Push',
+                'vod_play_from': 'd-s.io',  # 新增的播放路线标识
                 'vod_play_url': f'播放${vod_play_url}'
             }
             return {'list': [vod]}
@@ -189,38 +188,49 @@ class Spider(Spider):
             return {'list': []}
 
     def playerContent(self, flag, id, vipFlags):
-        """
-        支持 iframe XHR 嗅探：
-        1. 如果 Push 解析失败，尝试从 iframe src 获取真实视频链接。
-        2. 支持 mp4 / m3u8 自动解析。
-        """
         url = self.d64(id)
-        headers = {
-            'User-Agent': self.headers['User-Agent'],
-            'Referer': self.host,
-            'Accept': '*/*',
-            'X-Requested-With': 'XMLHttpRequest'
-        }
-
-        # iframe 或 d-s.io 链接处理
-        if 'd-s.io' in url:
+        
+        # d-s.io 路线的解析逻辑
+        if flag == 'd-s.io':
             try:
-                # 获取 iframe 页面
-                resp = self.session.get(url, headers={'User-Agent': self.headers['User-Agent'], 'Referer': self.host}, timeout=30)
-                resp.raise_for_status()
-                # 尝试获取 js 异步请求的真实视频链接
-                match_hash_token = re.search(r'/dood\?op=watch&hash=([^&]+)&token=([^&]+)', resp.text)
-                if match_hash_token:
-                    hash_val, token_val = match_hash_token.groups()
-                    dood_url = f"https://d-s.io/dood?op=watch&hash={hash_val}&token={token_val}&embed=1&ref2={url}"
-                    dood_resp = self.session.get(dood_url, headers=headers, timeout=30)
-                    dood_resp.raise_for_status()
-                    video_url = dood_resp.text.strip()
-                    if video_url:
-                        return {'parse': 0, 'url': video_url, 'header': headers}
-                # fallback: 使用 iframe src 直接返回
-                return {'parse': 1, 'url': url, 'header': headers}
-            except Exception:
-                return {'parse': 1, 'url': url, 'header': headers}
+                
+                resp_iframe = self.session.get(url, timeout=30)
+                resp_iframe.raise_for_status()
+                html_content = resp_iframe.text
 
-        return {'parse': 1, 'url': url, 'header': headers}
+                match = re.search(r"\$\.get\('(/pass_md5/[^']+)'", html_content)
+                if not match:
+                    raise ValueError("未在 iframe 页面源代码中找到 pass_md5 路径。")
+                pass_md5_path = match.group(1)
+                token = pass_md5_path.split('/')[-1]
+
+                
+                pass_md5_url = f"https://d-s.io{pass_md5_path}"
+                resp_base_url = self.session.get(pass_md5_url, headers={'Referer': url}, timeout=30)
+                resp_base_url.raise_for_status()
+                video_url_base = resp_base_url.text.strip()
+                if not video_url_base:
+                    raise ValueError("pass_md5 请求响应为空。")
+
+                
+                expiry_time = int(time.time()) + 3600
+                if video_url_base.endswith('~'):
+                    video_url_base = video_url_base[:-1]
+
+                final_video_url = f"{video_url_base}?token={token}&expiry={expiry_time}"
+                
+                
+                headers = {
+                    'User-Agent': self.headers['User-Agent'],
+                    'Referer': url,
+                    'Range': 'bytes=0-'
+                }
+                return {'parse': 0, 'url': final_video_url, 'header': headers}
+
+            except Exception as e:
+                
+                self.log(f"d-s.io 解析失败: {str(e)}")
+                return {'parse': 0, 'url': '', 'header': ''}
+        
+        
+        return {'parse': 1, 'url': url, 'header': {}}
