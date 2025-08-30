@@ -179,3 +179,4 @@ class Spider(Spider):
                 'Referer': self.host
             }
         }
+
