@@ -58,6 +58,10 @@ class Spider(Spider):
         vlist = []
         for i in selector.items():
             try:
+                # 过滤广告元素
+                if i('iframe').length > 0 or 'Ad' in i.text() or 'ad' in i.text():
+                    continue
+                
                 # 获取视频链接和标题
                 link_elem = i('a').eq(0)
                 if not link_elem:
@@ -65,6 +69,10 @@ class Spider(Spider):
                 vod_url = link_elem.attr('href').strip()
                 vod_name = link_elem.text().strip()
                 if not vod_url or not vod_name:
+                    continue
+                
+                # 过滤掉非视频链接
+                if not vod_url.startswith('/') and not vod_url.startswith('http'):
                     continue
                 
                 # 获取图片
@@ -104,26 +112,34 @@ class Spider(Spider):
             "MEN": "/category/286935/",
             "MAP": "/category/742158/",
             "OF": "/category/621397/",
-          
+           
         }
         classes = [{'type_name': k, 'type_id': v} for k, v in cateManual.items()]
         
-        # 获取首页视频列表
+        # 获取首页视频列表 - 只选择特定区域的视频
         data = self.getpq('/')
-        vlist = self.getlist(data('li'))
+        # 选择 "Latest videos" 和 "Latest Movies" 区域的视频
+        latest_videos = data('div:contains("Latest videos")').next('ul li')
+        latest_movies = data('div:contains("Latest Movies")').next('ul li')
+        
+        vlist = []
+        vlist.extend(self.getlist(latest_videos))
+        vlist.extend(self.getlist(latest_movies))
         
         return {'class': classes, 'filters': {}, 'list': vlist}
 
     def categoryContent(self, tid, pg, filter, extend):
         url = tid if pg == 1 else f"{tid}page/{pg}/"
         data = self.getpq(url)
-        vlist = self.getlist(data('li'))
+        # 选择主要内容区域的视频列表
+        vlist = self.getlist(data('ul li').not_(':contains("Ad")').not_(':contains("ad")'))
         return {'page': pg, 'pagecount': 9999, 'limit': 90, 'total': 999999, 'list': vlist}
 
     def searchContent(self, key, quick, pg="1"):
         url = f"/?s={key}" if pg == "1" else f"/page/{pg}/?s={key}"
         data = self.getpq(url)
-        vlist = self.getlist(data('li'))
+        # 选择搜索结果区域的视频列表，排除广告
+        vlist = self.getlist(data('ul li').not_(':contains("Ad")').not_(':contains("ad")'))
         return {'list': vlist, 'page': pg}
 
     def detailContent(self, ids):
