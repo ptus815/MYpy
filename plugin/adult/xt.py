@@ -88,7 +88,7 @@ class Spider(Spider):
                 if i('iframe').length > 0 or 'Ad' in i.text() or 'ad' in i.text():
                     continue
                 
-                # 获取视频链接和标题
+                # 获取视频链接和标题 - 使用更精确的选择器
                 link_elem = i('a').eq(0)
                 if not link_elem:
                     continue
@@ -110,24 +110,51 @@ class Spider(Spider):
                 if any(keyword in vod_name.lower() for keyword in ad_keywords):
                     continue
                 
-                # 获取图片
+                # 获取图片 - 使用更精确的选择器
                 img_elem = i('img').eq(0)
-                vod_pic = img_elem.attr('src') or img_elem.attr('data-src') or img_elem.attr('data-original') or img_elem.attr('data-thumb') or img_elem.attr('data-lazy-src') or ''
-                if not vod_pic and img_elem.attr('srcset'):
-                    vod_pic = img_elem.attr('srcset').split(',')[0].split(' ')[0]
-                if vod_pic and not vod_pic.startswith('http'):
-                    vod_pic = urljoin(self.host, vod_pic)
-                
-                # 验证图片URL
-                if vod_pic and not self.is_valid_video_url(vod_pic):
+                if img_elem:
+                    # 尝试多种图片属性
+                    vod_pic = (img_elem.attr('src') or 
+                              img_elem.attr('data-src') or 
+                              img_elem.attr('data-original') or 
+                              img_elem.attr('data-thumb') or 
+                              img_elem.attr('data-lazy-src') or 
+                              img_elem.attr('data-srcset') or '')
+                    
+                    # 处理srcset属性
+                    if not vod_pic and img_elem.attr('srcset'):
+                        srcset = img_elem.attr('srcset')
+                        if srcset:
+                            # 取第一个图片URL
+                            vod_pic = srcset.split(',')[0].split(' ')[0].strip()
+                    
+                    # 处理相对路径
+                    if vod_pic and not vod_pic.startswith('http'):
+                        vod_pic = urljoin(self.host, vod_pic)
+                    
+                    # 验证图片URL - 只过滤明显的广告图片
+                    if vod_pic:
+                        ad_domains = ['cam4.com', 'landers.cam4.com', 'juicyads.com', 'adultfriendfinder.com']
+                        if any(domain in vod_pic.lower() for domain in ad_domains):
+                            vod_pic = ''
+                else:
                     vod_pic = ''
                 
-                # 获取时长和评分
-                duration_elem = i('div').filter(lambda idx, elem: ':' in pq(elem).text() and len(pq(elem).text().strip()) <= 10).eq(0)
+                # 获取时长和评分 - 使用更精确的选择器
+                # 查找包含时间格式的元素 (如 00:37:19)
+                duration_elem = i('div').filter(lambda idx, elem: 
+                    ':' in pq(elem).text() and 
+                    len(pq(elem).text().strip()) <= 10 and
+                    pq(elem).text().strip().count(':') >= 2
+                ).eq(0)
                 vod_remarks = duration_elem.text().strip() if duration_elem else ''
                 
-                # 获取评分
-                rating_elem = i('div').filter(lambda idx, elem: pq(elem).text().strip().isdigit() and len(pq(elem).text().strip()) <= 5).eq(0)
+                # 获取评分 - 查找数字评分
+                rating_elem = i('div').filter(lambda idx, elem: 
+                    pq(elem).text().strip().isdigit() and 
+                    len(pq(elem).text().strip()) <= 3 and
+                    int(pq(elem).text().strip()) <= 100
+                ).eq(0)
                 vod_year = rating_elem.text().strip() if rating_elem else ''
                 
                 vlist.append({
@@ -158,11 +185,12 @@ class Spider(Spider):
         }
         classes = [{'type_name': k, 'type_id': v} for k, v in cateManual.items()]
         
-        # 获取首页视频列表 - 只选择特定区域的视频
+        # 获取首页视频列表 - 使用更精确的选择器
         data = self.getpq('/')
-        # 选择 "Latest videos" 和 "Latest Movies" 区域的视频，排除广告
-        latest_videos = data('div:contains("Latest videos")').next('ul li').not_(':contains("Ad")').not_(':contains("ad")')
-        latest_movies = data('div:contains("Latest Movies")').next('ul li').not_(':contains("Ad")').not_(':contains("ad")')
+        
+        # 选择 "Latest videos" 区域的视频，排除 "See all" 链接
+        latest_videos = data('div:contains("Latest videos")').next('ul li').not_(':contains("See all")')
+        latest_movies = data('div:contains("Latest Movies")').next('ul li').not_(':contains("See all")')
         
         vlist = []
         vlist.extend(self.getlist(latest_videos))
@@ -173,15 +201,15 @@ class Spider(Spider):
     def categoryContent(self, tid, pg, filter, extend):
         url = tid if pg == 1 else f"{tid}page/{pg}/"
         data = self.getpq(url)
-        # 选择主要内容区域的视频列表
-        vlist = self.getlist(data('ul li').not_(':contains("Ad")').not_(':contains("ad")'))
+        # 选择主要内容区域的视频列表，排除广告和导航链接
+        vlist = self.getlist(data('ul li').not_(':contains("Ad")').not_(':contains("ad")').not_(':contains("See all")'))
         return {'page': pg, 'pagecount': 9999, 'limit': 90, 'total': 999999, 'list': vlist}
 
     def searchContent(self, key, quick, pg="1"):
         url = f"/?s={key}" if pg == "1" else f"/page/{pg}/?s={key}"
         data = self.getpq(url)
-        # 选择搜索结果区域的视频列表，排除广告
-        vlist = self.getlist(data('ul li').not_(':contains("Ad")').not_(':contains("ad")'))
+        # 选择搜索结果区域的视频列表，排除广告和导航链接
+        vlist = self.getlist(data('ul li').not_(':contains("Ad")').not_(':contains("ad")').not_(':contains("See all")'))
         return {'list': vlist, 'page': pg}
 
     def detailContent(self, ids):
