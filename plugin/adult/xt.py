@@ -23,8 +23,13 @@ class Spider(Spider):
 
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'zh-CN,zh;q=0.8,en-US;q=0.3,en;q=0.2',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+            'Accept-Language': 'zh,zh-CN;q=0.9,en;q=0.8',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'sec-ch-ua-mobile': ?0,
+            'sec-ch-ua-platform:': "Android"
+            
         }
 
         self.host = "https://gay.xtapes.in"
@@ -43,13 +48,47 @@ class Spider(Spider):
 
     def destroy(self):
         pass
+    
+    def update_cookies(self):
+        """更新Cookie以应对Cloudflare验证"""
+        try:
+            # 先访问首页获取新的Cookie
+            resp = self.session.get(self.host, timeout=15)
+            if resp.status_code == 200:
+                # 提取cf_clearance cookie
+                cf_cookie = resp.cookies.get('cf_clearance')
+                if cf_cookie:
+                    self.session.cookies.set('cf_clearance', cf_cookie)
+                    print("Cookie更新成功")
+                    return True
+                else:
+                    print("未找到cf_clearance cookie")
+            else:
+                print(f"获取Cookie失败，状态码: {resp.status_code}")
+        except Exception as e:
+            print(f"更新Cookie失败: {e}")
+        return False
 
     def getpq(self, path=''):
         url = path if path.startswith('http') else self.host + path
+        
         try:
+            # 设置Referer
+            headers = self.headers.copy()
+            if path and not path.startswith('http'):
+                if path == '/':
+                    headers['Referer'] = self.host
+                else:
+                    headers['Referer'] = self.host + path
+            
+            # 更新session的headers
+            self.session.headers.update(headers)
+            
             resp = self.session.get(url, timeout=15)
             resp.encoding = 'utf-8' if resp.encoding == 'ISO-8859-1' else resp.encoding
+            
             return pq(resp.text)
+            
         except Exception as e:
             print(f"获取页面失败: {e}")
             return pq("")
@@ -61,7 +100,8 @@ class Spider(Spider):
         
         # 检查是否是广告域名
         ad_domains = ['cam4.com', 'landers.cam4.com', 'juicyads.com', 'adultfriendfinder.com', 
-                     'livejasmin.com', 'chaturbate.com', 'myfreecams.com', 'stripchat.com']
+                     'livejasmin.com', 'chaturbate.com', 'myfreecams.com', 'stripchat.com',
+                     'kimmy.faduz.xyz', 'kra.timbuk.online', 'ava.lazumi.online', 'wa.astorix.online']
         if any(domain in url.lower() for domain in ad_domains):
             return False
         
@@ -74,7 +114,7 @@ class Spider(Spider):
         # 检查是否是外部链接（非本站）
         if url.startswith('http') and self.host not in url:
             # 允许一些可信的外部视频域名
-            trusted_domains = ['youtube.com', 'vimeo.com', 'dailymotion.com']
+            trusted_domains = ['youtube.com', 'vimeo.com', 'dailymotion.com', '74k.io', '88z.io']
             if not any(domain in url.lower() for domain in trusted_domains):
                 return False
         
@@ -86,6 +126,10 @@ class Spider(Spider):
             try:
                 # 过滤广告元素
                 if i('iframe').length > 0 or 'Ad' in i.text() or 'ad' in i.text():
+                    continue
+                
+                # 过滤分类导航项 - 检查是否包含图片和链接
+                if not i('img').length or not i('a').length:
                     continue
                 
                 # 获取视频链接和标题 - 使用更精确的选择器
@@ -170,7 +214,7 @@ class Spider(Spider):
         return vlist
 
     def homeContent(self, filter):
-        # 根据截图中的实际分类信息
+        # 注意不要修改我的这些分类
         cateManual = {
             "最新": "/", 
             "推荐": "/?filtre=popular",
@@ -188,6 +232,7 @@ class Spider(Spider):
         # 获取首页视频列表 - 使用更精确的选择器
         data = self.getpq('/')
         
+        # 只选择主要内容区域的视频，排除底部分类导航
         # 选择 "Latest videos" 区域的视频，排除 "See all" 链接
         latest_videos = data('div:contains("Latest videos")').next('ul li').not_(':contains("See all")')
         latest_movies = data('div:contains("Latest Movies")').next('ul li').not_(':contains("See all")')
@@ -199,17 +244,21 @@ class Spider(Spider):
         return {'class': classes, 'filters': {}, 'list': vlist}
 
     def categoryContent(self, tid, pg, filter, extend):
-        url = tid if pg == 1 else f"{tid}page/{pg}/"
+        url = self.host + tid + f'page/{pg}/' if pg > 1 else self.host + tid
         data = self.getpq(url)
-        # 选择主要内容区域的视频列表，排除广告和导航链接
-        vlist = self.getlist(data('ul li').not_(':contains("Ad")').not_(':contains("ad")').not_(':contains("See all")'))
-        return {'page': pg, 'pagecount': 9999, 'limit': 90, 'total': 999999, 'list': vlist}
+        
+        # 获取视频列表
+        vlist = self.getlist(data('ul li:has(img):has(a):not(:contains("Ad")):not(:contains("ad")):not(:contains("See all"))'))
+        
+        return {'list': vlist, 'page': pg}
 
     def searchContent(self, key, quick, pg="1"):
-        url = f"/?s={key}" if pg == "1" else f"/page/{pg}/?s={key}"
+        url = self.host + f'/search/{key}/page/{pg}/'
         data = self.getpq(url)
-        # 选择搜索结果区域的视频列表，排除广告和导航链接
-        vlist = self.getlist(data('ul li').not_(':contains("Ad")').not_(':contains("ad")').not_(':contains("See all")'))
+        
+        # 获取搜索结果
+        vlist = self.getlist(data('ul li:has(img):has(a):not(:contains("Ad")):not(:contains("ad")):not(:contains("See all"))'))
+        
         return {'list': vlist, 'page': pg}
 
     def detailContent(self, ids):
@@ -221,9 +270,18 @@ class Spider(Spider):
         # 获取标签
         tags = [tag.text().strip() for tag in data('a[href*="/category/"]').items() if tag.text().strip()]
 
-        # 获取iframe播放器
-        iframe_src = data('iframe').attr('src') or ''
+        # 获取iframe播放器 - 优先选择第一个有效的iframe
+        iframe_src = ''
+        iframes = data('#video-code iframe')
+        
+        for iframe in iframes.items():
+            src = iframe.attr('src') or ''
+            if src and ('74k.io' in src or '88z.io' in src):
+                iframe_src = src
+                break
+        
         if not iframe_src:
+            # 如果没有找到有效的iframe，尝试其他属性
             for attr in ['data-src', 'data-frame', 'data-iframe']:
                 iframe_src = data(f'[{attr}]').attr(attr) or ''
                 if iframe_src:
