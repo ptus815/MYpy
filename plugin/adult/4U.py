@@ -339,7 +339,17 @@ class Spider(Spider):
                 headers_final_video = {
                     'User-Agent': self.headers['User-Agent'],
                     'Referer': 'https://d-s.io/', # Referer 必须是主域
-                    'Range': 'bytes=0-'
+                    'Range': 'bytes=0-',
+                    'Accept': 'video/webm,video/ogg,video/*;q=0.9,application/ogg;q=0.7,audio/*;q=0.6,*/*;q=0.5',
+                    'Accept-Encoding': 'identity',
+                    'Accept-Language': 'zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2',
+                    'Connection': 'keep-alive',
+                    'Host': 'lo559mk.cloudatacdn.com',
+                    'Referer': 'https://d-s.io/',
+                    'Sec-Fetch-Dest': 'video',
+                    'Sec-Fetch-Mode': 'no-cors',
+                    'Sec-Fetch-Site': 'cross-site',
+                    'Sec-GPC': '1'
                 }
                 return {'parse': 0, 'url': final_video_url, 'header': headers_final_video}
 
@@ -354,3 +364,4 @@ class Spider(Spider):
                 'User-Agent': self.headers['User-Agent']
             }
             return {'parse': 1, 'url': url, 'header': headers}
+
