@@ -88,6 +88,10 @@ class Spider(Spider):
                 if i('iframe').length > 0 or 'Ad' in i.text() or 'ad' in i.text():
                     continue
                 
+                # 过滤分类导航项 - 检查是否包含图片和链接
+                if not i('img').length or not i('a').length:
+                    continue
+                
                 # 获取视频链接和标题 - 使用更精确的选择器
                 link_elem = i('a').eq(0)
                 if not link_elem:
@@ -188,6 +192,7 @@ class Spider(Spider):
         # 获取首页视频列表 - 使用更精确的选择器
         data = self.getpq('/')
         
+        # 只选择主要内容区域的视频，排除底部分类导航
         # 选择 "Latest videos" 区域的视频，排除 "See all" 链接
         latest_videos = data('div:contains("Latest videos")').next('ul li').not_(':contains("See all")')
         latest_movies = data('div:contains("Latest Movies")').next('ul li').not_(':contains("See all")')
@@ -201,15 +206,17 @@ class Spider(Spider):
     def categoryContent(self, tid, pg, filter, extend):
         url = tid if pg == 1 else f"{tid}page/{pg}/"
         data = self.getpq(url)
-        # 选择主要内容区域的视频列表，排除广告和导航链接
-        vlist = self.getlist(data('ul li').not_(':contains("Ad")').not_(':contains("ad")').not_(':contains("See all")'))
+        # 选择主要内容区域的视频列表，排除广告、导航链接和底部分类
+        # 只选择包含图片和链接的真实视频项
+        vlist = self.getlist(data('ul li').has('img').has('a').not_(':contains("Ad")').not_(':contains("ad")').not_(':contains("See all")'))
         return {'page': pg, 'pagecount': 9999, 'limit': 90, 'total': 999999, 'list': vlist}
 
     def searchContent(self, key, quick, pg="1"):
         url = f"/?s={key}" if pg == "1" else f"/page/{pg}/?s={key}"
         data = self.getpq(url)
-        # 选择搜索结果区域的视频列表，排除广告和导航链接
-        vlist = self.getlist(data('ul li').not_(':contains("Ad")').not_(':contains("ad")').not_(':contains("See all")'))
+        # 选择搜索结果区域的视频列表，排除广告、导航链接和底部分类
+        # 只选择包含图片和链接的真实视频项
+        vlist = self.getlist(data('ul li').has('img').has('a').not_(':contains("Ad")').not_(':contains("ad")').not_(':contains("See all")'))
         return {'list': vlist, 'page': pg}
 
     def detailContent(self, ids):
