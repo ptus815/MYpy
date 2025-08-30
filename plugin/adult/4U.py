@@ -259,24 +259,63 @@ class Spider(Spider):
         
         if flag == 'vide0.net':
             try:
-                # vide0.net 使用 dood 系统，需要特殊处理
-                self.log(f"处理 vide0.net iframe: {url}")
+                # vide0.net 实际上重定向到 d-s.io 系统，直接替换域名为 d-s.io
+                self.log(f"处理 vide0.net iframe，转换为d-s.io: {url}")
                 
-                # 设置请求头
+                # 将 vide0.net 域名替换为 d-s.io
+                d_s_io_url = url.replace('https://vide0.net/', 'https://d-s.io/')
+                self.log(f"转换后的d-s.io URL: {d_s_io_url}")
+                
+                # 直接按照 d-s.io 的三个步骤来解析
+                # 步骤 1: 请求 iframe 页面，动态提取 pass_md5 路径和 token
                 headers_iframe = {
                     'User-Agent': self.headers['User-Agent'],
                     'Referer': self.host
                 }
+                resp_iframe = self.session.get(d_s_io_url, headers=headers_iframe, timeout=30)
+                resp_iframe.raise_for_status()
+                html_content = resp_iframe.text
                 
-                # 直接返回 iframe URL，让播放器处理
-                headers_final = {
+                match = re.search(r"\$\.get\('(/pass_md5/[^']+)'", html_content)
+                if not match:
+                    raise ValueError("未在转换后的d-s.io iframe 页面源代码中找到 pass_md5 路径。")
+                pass_md5_path = match.group(1)
+                token = pass_md5_path.split('/')[-1]
+                self.log(f"成功提取 pass_md5 路径: {pass_md5_path} 和 token: {token}")
+
+                # 步骤 2: 发送 pass_md5 请求，获取视频基础链接
+                pass_md5_url = f"https://d-s.io{pass_md5_path}"
+                headers_pass_md5 = {
                     'User-Agent': self.headers['User-Agent'],
-                    'Referer': 'https://vide0.net/'
+                    'Referer': d_s_io_url, # Referer 必须是转换后的 iframe URL
+                    'Accept': '*/*',
+                    'X-Requested-With': 'XMLHttpRequest'
                 }
-                return {'parse': 1, 'url': url, 'header': headers_final}
+                resp_base_url = self.session.get(pass_md5_url, headers=headers_pass_md5, timeout=30)
+                resp_base_url.raise_for_status()
+                video_url_base = resp_base_url.text.strip()
+                if not video_url_base:
+                    raise ValueError("pass_md5 请求响应为空。")
+                self.log(f"成功获取视频基础链接: {video_url_base}")
+
+                # 步骤 3: 拼接最终链接并返回
+                expiry_time = int(time.time() * 1000) + 3600000  # 转换为毫秒并加上一个小时
+                if video_url_base.endswith('~'):
+                    video_url_base = video_url_base[:-1]
+
+                final_video_url = f"{video_url_base}?token={token}&expiry={expiry_time}"
+                self.log(f"拼接最终链接: {final_video_url}")
+                
+                # 最终播放请求头
+                headers_final_video = {
+                    'User-Agent': self.headers['User-Agent'],
+                    'Referer': 'https://d-s.io/', # Referer 必须是主域
+                    'Range': 'bytes=0-'
+                }
+                return {'parse': 0, 'url': final_video_url, 'header': headers_final_video}
                 
             except Exception as e:
-                self.log(f"vide0.net 解析失败: {str(e)}")
+                self.log(f"vide0.net 转换失败: {str(e)}")
                 return {'parse': 0, 'url': '', 'header': {}}
         
         elif flag == 'filemoon.to':
@@ -364,4 +403,3 @@ class Spider(Spider):
                 'User-Agent': self.headers['User-Agent']
             }
             return {'parse': 1, 'url': url, 'header': headers}
-
