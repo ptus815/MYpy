@@ -93,6 +93,8 @@ class Spider(Spider):
 
                 img_elem = article('img')
                 vod_pic = img_elem.attr('src') or img_elem.attr('data-src') or img_elem.attr('data-lazy-src') or ''
+                if not vod_pic and img_elem.attr('srcset'):
+                    vod_pic = img_elem.attr('srcset').split(' ')[0]
                 if vod_pic and not vod_pic.startswith('http'):
                     vod_pic = urljoin(self.host, vod_pic)
 
@@ -148,6 +150,8 @@ class Spider(Spider):
             if not vod_pic:
                 img_elem = doc('img[src*="cover"], img[src*="poster"], img[src*="thumb"]').eq(0)
                 vod_pic = img_elem.attr('src') or img_elem.attr('data-src') or ''
+                if not vod_pic and img_elem.attr('srcset'):
+                    vod_pic = img_elem.attr('srcset').split(' ')[0]
 
             tags = [t.text().strip() for t in doc('.entry-tags a, .post-tags a, a[href*="/tag/"]').items() if t.text().strip()]
             info_text = doc('.entry-meta, .post-meta').text().strip() or ''
@@ -166,7 +170,7 @@ class Spider(Spider):
                 'vod_pic': vod_pic,
                 'vod_content': vod_content,
                 'vod_tag': ', '.join(tags) if tags else "GayCock4U",
-                'vod_play_from': 'd-s.io',  # 播放路线标识
+                'vod_play_from': 'd-s.io',  # 新增的播放路线标识
                 'vod_play_url': f'播放${vod_play_url}'
             }
             return {'list': [vod]}
@@ -190,42 +194,58 @@ class Spider(Spider):
     def playerContent(self, flag, id, vipFlags):
         url = self.d64(id)
         
-        # d-s.io 路线的解析逻辑
         if flag == 'd-s.io':
             try:
-                resp_iframe = self.session.get(url, timeout=30)
+                # 步骤 1: 请求 iframe 页面，动态提取 pass_md5 路径和 token
+                headers_iframe = {
+                    'User-Agent': self.headers['User-Agent'],
+                    'Referer': self.host
+                }
+                resp_iframe = self.session.get(url, headers=headers_iframe, timeout=30)
                 resp_iframe.raise_for_status()
                 html_content = resp_iframe.text
-
+                
                 match = re.search(r"\$\.get\('(/pass_md5/[^']+)'", html_content)
                 if not match:
                     raise ValueError("未在 iframe 页面源代码中找到 pass_md5 路径。")
                 pass_md5_path = match.group(1)
                 token = pass_md5_path.split('/')[-1]
+                self.log(f"成功提取 pass_md5 路径: {pass_md5_path} 和 token: {token}")
 
+                # 步骤 2: 发送 pass_md5 请求，获取视频基础链接
                 pass_md5_url = f"https://d-s.io{pass_md5_path}"
-                resp_base_url = self.session.get(pass_md5_url, headers={'Referer': url}, timeout=30)
+                headers_pass_md5 = {
+                    'User-Agent': self.headers['User-Agent'],
+                    'Referer': url, # Referer 必须是 iframe URL
+                    'Accept': '*/*',
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+                resp_base_url = self.session.get(pass_md5_url, headers=headers_pass_md5, timeout=30)
                 resp_base_url.raise_for_status()
                 video_url_base = resp_base_url.text.strip()
                 if not video_url_base:
                     raise ValueError("pass_md5 请求响应为空。")
+                self.log(f"成功获取视频基础链接: {video_url_base}")
 
+                # 步骤 3: 拼接最终链接并返回
                 expiry_time = int(time.time() * 1000) + 3600000  # 转换为毫秒并加上一个小时
                 if video_url_base.endswith('~'):
                     video_url_base = video_url_base[:-1]
 
                 final_video_url = f"{video_url_base}?token={token}&expiry={expiry_time}"
+                self.log(f"拼接最终链接: {final_video_url}")
                 
-                headers = {
+                # 最终播放请求头
+                headers_final_video = {
                     'User-Agent': self.headers['User-Agent'],
-                    'Referer': url,
+                    'Referer': 'https://d-s.io/', # Referer 必须是主域
                     'Range': 'bytes=0-'
                 }
-                return {'parse': 0, 'url': final_video_url, 'header': headers}
+                return {'parse': 0, 'url': final_video_url, 'header': headers_final_video}
 
             except Exception as e:
                 self.log(f"d-s.io 解析失败: {str(e)}")
-                return {'parse': 0, 'url': '', 'header': ''}
+                return {'parse': 0, 'url': '', 'header': {}}
         
         # 通用的默认处理逻辑，用于其他非 d-s.io 的链接
         headers = {
