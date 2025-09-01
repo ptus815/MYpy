@@ -60,7 +60,7 @@ class Spider(Spider):
         vlist = []
         for item in selector('.post.grid').items():
             try:
-                # 获取标题和链接
+               
                 title_elem = item('h3 a')
                 vod_name = title_elem.text().strip()
                 vod_url = title_elem.attr('href')
@@ -68,54 +68,55 @@ class Spider(Spider):
                 if not vod_url or not vod_name:
                     continue
                 
-                # 改进图片获取逻辑
+               
                 vod_pic = ''
                 
-                # 方法1: 尝试获取 .img img 元素
+                
                 img_elem = item('.img img')
                 if img_elem:
-                    vod_pic = img_elem.attr('src') or img_elem.attr('data-src') or ''
+                   
+                    vod_pic = img_elem.attr('data-src') or img_elem.attr('src') or ''
                 
 
                 
-                # 处理相对URL
+                
                 if vod_pic and not vod_pic.startswith('http'):
                     vod_pic = urljoin(self.host, vod_pic)
                 
-                # 过滤掉占位符图片
+                
                 if vod_pic and 'thumbnail.png' in vod_pic:
                     vod_pic = ''
                 
-                # 获取时长
+                
                 duration_elem = item('.post-sign')
                 vod_remarks = duration_elem.text().strip() if duration_elem else ''
                 
-                # 获取分类或标签（优先显示分类，如果没有分类则显示标签）
+               
                 cat_elem = item('.cat a')
                 tag_elem = item('.tag a')
                 
                 if cat_elem:
                     vod_year = cat_elem.text().strip()
-                    vod_tag = ''  # 有分类时标签设为空
+                    vod_tag = ''  
                 elif tag_elem:
-                    vod_year = ''  # 没有分类时分类设为空
+                    vod_year = ''  
                     vod_tag = tag_elem.text().strip()
                 else:
                     vod_year = ''
                     vod_tag = ''
                 
-                # 获取时间
+              
                 time_elem = item('.time')
                 vod_time = time_elem.text().strip() if time_elem else ''
                 
-                # 获取浏览量和下载量
+                
                 views_elem = item('.views')
                 vod_views = views_elem.text().strip() if views_elem else ''
                 
                 downs_elem = item('.downs')
                 vod_downs = downs_elem.text().strip() if downs_elem else ''
                 
-                # 提取视频ID
+                
                 vid = vod_url.split('/')[-2] if vod_url.endswith('/') else vod_url.split('/')[-1]
                 
                 vlist.append({
@@ -146,7 +147,7 @@ class Spider(Spider):
         }
         classes = [{'type_name': k, 'type_id': v} for k, v in cateManual.items()]
         
-        # 获取首页最新内容
+        
         data = self.getpq('/')
         vlist = self.getlist(data)
         
@@ -174,56 +175,56 @@ class Spider(Spider):
         url = ids[0] if ids[0].startswith('http') else f"{self.host}/{ids[0]}/"
         data = self.getpq(url)
         
-        # 获取标题
+       
         title = data('.article-title').text().strip()
         if not title:
             title = data('h1').text().strip()
         
-        # 获取图片
+        
         img_elem = data('.single-images img').eq(0)
         vod_pic = img_elem.attr('src') or img_elem.attr('data-src') or ''
         if vod_pic and not vod_pic.startswith('http'):
             vod_pic = urljoin(self.host, vod_pic)
         
-        # 获取时长
+        
         duration_elem = data('.post-sign, .duration')
         vod_remarks = duration_elem.text().strip() if duration_elem else ''
         
-        # 获取分类或标签（优先显示分类，如果没有分类则显示标签）
+       
         cat_elem = data('.cat a, .article-meta .item-cats a')
         tag_elem = data('.article-tags a, .tag a')
         
         if cat_elem:
             vod_year = cat_elem.text().strip()
-            tags = []  # 有分类时标签设为空
+            tags = []  
         elif tag_elem:
-            vod_year = ''  # 没有分类时分类设为空
+            vod_year = ''  
             tags = [tag.text().strip() for tag in tag_elem.items() if tag.text().strip()]
         else:
             vod_year = ''
             tags = []
         
-        # 获取描述
+
         excerpt_elem = data('.excerpt')
         vod_content = excerpt_elem.text().strip() if excerpt_elem else ''
         
-        # 获取播放器iframe的src链接
+  
         iframe_src = data('.article-video iframe').attr('src') or ''
         if not iframe_src:
             iframe_src = data('iframe').attr('src') or ''
         if not iframe_src:
-            # 尝试查找其他可能的播放器元素
+            
             iframe_src = data('.video-player iframe').attr('src') or ''
         if not iframe_src:
             iframe_src = data('.player iframe').attr('src') or ''
         
-        # 如果没有找到iframe，尝试查找播放按钮的链接
+        
         if not iframe_src:
             play_btn = data('a[href*="player"], .play-btn, .watch-btn')
             if play_btn:
                 iframe_src = play_btn.attr('href') or ''
         
-        # 如果还是没有找到，使用详情页URL作为播放链接
+       
         if not iframe_src:
             iframe_src = url
         
@@ -240,7 +241,7 @@ class Spider(Spider):
         return {'list': [vod]}
 
     def playerContent(self, flag, id, vipFlags):
-        # 如果id已经是URL，直接使用；如果是base64编码，则解码
+        
         try:
             if id.startswith('http'):
                 play_url = id
