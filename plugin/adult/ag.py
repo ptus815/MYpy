@@ -56,37 +56,64 @@ class Spider(Spider):
 
     def getlist(self, selector):
         vlist = []
-        for i in selector.items():
+        for item in selector('.post.grid').items():
             try:
-                link_elem = i('h3 a, h2 a, h1 a, .entry-title a').eq(0)
-                if not link_elem:
-                    continue
-                vod_url = link_elem.attr('href').strip()
-                vod_name = link_elem.text().strip()
+                # 获取标题和链接
+                title_elem = item('h3 a')
+                vod_name = title_elem.text().strip()
+                vod_url = title_elem.attr('href')
+                
                 if not vod_url or not vod_name:
                     continue
                 
-                img_elem = i('img').eq(0)
-                vod_pic = img_elem.attr('src') or img_elem.attr('data-src') or img_elem.attr('data-original') or img_elem.attr('data-thumb') or img_elem.attr('data-lazy-src') or ''
-                if not vod_pic and img_elem.attr('srcset'):
-                    vod_pic = img_elem.attr('srcset').split(',')[0].split(' ')[0]
+                # 获取图片
+                img_elem = item('.img img')
+                vod_pic = img_elem.attr('src') or img_elem.attr('data-src') or ''
                 if vod_pic and not vod_pic.startswith('http'):
                     vod_pic = urljoin(self.host, vod_pic)
                 
-                # 提取时长信息
-                duration_elem = i('.post-sign, .duration')
+                # 获取时长
+                duration_elem = item('.post-sign')
                 vod_remarks = duration_elem.text().strip() if duration_elem else ''
                 
-                # 提取分类信息
-                cat_elem = i('.cat a')
-                vod_year = cat_elem.text().strip() if cat_elem else ''
+                # 获取分类或标签（优先显示分类，如果没有分类则显示标签）
+                cat_elem = item('.cat a')
+                tag_elem = item('.tag a')
+                
+                if cat_elem:
+                    vod_year = cat_elem.text().strip()
+                    vod_tag = ''  # 有分类时标签设为空
+                elif tag_elem:
+                    vod_year = ''  # 没有分类时分类设为空
+                    vod_tag = tag_elem.text().strip()
+                else:
+                    vod_year = ''
+                    vod_tag = ''
+                
+                # 获取时间
+                time_elem = item('.time')
+                vod_time = time_elem.text().strip() if time_elem else ''
+                
+                # 获取浏览量和下载量
+                views_elem = item('.views')
+                vod_views = views_elem.text().strip() if views_elem else ''
+                
+                downs_elem = item('.downs')
+                vod_downs = downs_elem.text().strip() if downs_elem else ''
+                
+                # 提取视频ID
+                vid = vod_url.split('/')[-2] if vod_url.endswith('/') else vod_url.split('/')[-1]
                 
                 vlist.append({
-                    'vod_id': b64encode(vod_url.encode('utf-8')).decode('utf-8'),
+                    'vod_id': vid,
                     'vod_name': vod_name,
                     'vod_pic': vod_pic,
                     'vod_year': vod_year,
                     'vod_remarks': vod_remarks,
+                    'vod_tag': vod_tag,
+                    'vod_time': vod_time,
+                    'vod_views': vod_views,
+                    'vod_downs': vod_downs,
                     'style': {'ratio': 1.33, 'type': 'rect'}
                 })
             except Exception as e:
@@ -104,7 +131,7 @@ class Spider(Spider):
         
         # 获取首页最新内容
         data = self.getpq('/')
-        vlist = self.getlist(data('.post'))
+        vlist = self.getlist(data)
         
         # 为OnlyFans分类生成筛选器
         filters = {}
@@ -154,7 +181,7 @@ class Spider(Spider):
 
     def categoryContent(self, tid, pg, filter, extend):
         url = tid
-        if pg > 1:
+        if int(pg) > 1:
             if '/tag/' in tid:
                 url = f"{tid}page/{pg}/"
             elif '/category/' in tid:
@@ -174,50 +201,64 @@ class Spider(Spider):
                 url += '?' + '&'.join(params)
         
         data = self.getpq(url)
-        vlist = self.getlist(data('.post'))
+        vlist = self.getlist(data)
         return {'page': pg, 'pagecount': 9999, 'limit': 90, 'total': 999999, 'list': vlist}
 
     def searchContent(self, key, quick, pg="1"):
         url = f"/?s={key}" if pg == "1" else f"/page/{pg}/?s={key}"
         data = self.getpq(url)
-        vlist = self.getlist(data('.post'))
+        vlist = self.getlist(data)
         return {'list': vlist, 'page': pg}
 
     def detailContent(self, ids):
-        url = b64decode(ids[0]).decode('utf-8')
+        url = ids[0] if ids[0].startswith('http') else f"{self.host}/{ids[0]}/"
         data = self.getpq(url)
         
+        # 获取标题
         title = data('.article-title').text().strip()
         if not title:
             title = data('h1').text().strip()
         
-        # 提取视频播放器iframe
-        iframe_src = data('.article-video iframe').attr('src') or ''
-        if not iframe_src:
-            iframe_src = data('iframe').attr('src') or ''
-        
-        # 提取图片
+        # 获取图片
         img_elem = data('.single-images img').eq(0)
         vod_pic = img_elem.attr('src') or img_elem.attr('data-src') or ''
         if vod_pic and not vod_pic.startswith('http'):
             vod_pic = urljoin(self.host, vod_pic)
         
-        # 提取时长
+        # 获取时长
         duration_elem = data('.post-sign, .duration')
         vod_remarks = duration_elem.text().strip() if duration_elem else ''
         
-        # 提取分类
+        # 获取分类
         cat_elem = data('.cat a, .article-meta .item-cats a')
         vod_year = cat_elem.text().strip() if cat_elem else ''
         
-        # 提取标签
+        # 获取标签
         tags = [tag.text().strip() for tag in data('.article-tags a, .tag a').items() if tag.text().strip()]
         
-        # 提取描述
+        # 获取描述
         excerpt_elem = data('.excerpt')
         vod_content = excerpt_elem.text().strip() if excerpt_elem else ''
         
-        vod_play_url = b64encode(iframe_src.encode('utf-8')).decode('utf-8')
+        # 获取播放器iframe的src链接
+        iframe_src = data('.article-video iframe').attr('src') or ''
+        if not iframe_src:
+            iframe_src = data('iframe').attr('src') or ''
+        if not iframe_src:
+            # 尝试查找其他可能的播放器元素
+            iframe_src = data('.video-player iframe').attr('src') or ''
+        if not iframe_src:
+            iframe_src = data('.player iframe').attr('src') or ''
+        
+        # 如果没有找到iframe，尝试查找播放按钮的链接
+        if not iframe_src:
+            play_btn = data('a[href*="player"], .play-btn, .watch-btn')
+            if play_btn:
+                iframe_src = play_btn.attr('href') or ''
+        
+        # 如果还是没有找到，使用详情页URL作为播放链接
+        if not iframe_src:
+            iframe_src = url
         
         vod = {
             'vod_name': title,
@@ -227,12 +268,13 @@ class Spider(Spider):
             'vod_content': vod_content,
             'vod_tag': ', '.join(tags) if tags else "AsianGayLove",
             'vod_play_from': 'AsianGayLove',
-            'vod_play_url': f'播放${vod_play_url}'
+            'vod_play_url': f'播放${iframe_src}'
         }
         return {'list': [vod]}
 
     def playerContent(self, flag, id, vipFlags):
-        play_url = b64decode(id.encode('utf-8')).decode('utf-8')
+        # 直接返回播放URL，不进行base64编码
+        play_url = id
         return {
             'parse': 1,
             'url': play_url,
@@ -241,4 +283,3 @@ class Spider(Spider):
                 'Referer': self.host
             }
         }
-
