@@ -29,11 +29,7 @@
         "searchable": 1,
         "quickSearch": 1,
         "filterable": 0,
-        "timeout": 60,
-        "ext": {"proxy": {"http": "http://127.0.0.1:10172",
-                                "https": "https://127.0.0.1:10172"
-      }
-    }
+        "timeout": 60
       },	
       {
         "key": "GayXTapes",
@@ -401,4 +397,5 @@
   
 
   
+
 
