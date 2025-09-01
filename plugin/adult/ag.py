@@ -22,12 +22,15 @@ class Spider(Spider):
         self.proxies = {k: f'http://{v}' if isinstance(v, str) and not v.startswith('http') else v for k, v in self.proxies.items()}
 
         self.headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:137.0) Gecko/20100101 Firefox/137.0',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Accept-Encoding': 'gzip, deflate, br, zstd',
             'Connection': 'keep-alive',
-            'Sec-Fetch-Dest': 'document'
-           
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Upgrade-Insecure-Requests': '1'
         }
 
         self.host = "https://asiangaylove.com"
@@ -69,20 +72,23 @@ class Spider(Spider):
                 if not vod_url or not vod_name:
                     continue
                 
-                # 获取图片
+                # 改进图片获取逻辑
+                vod_pic = ''
+                
+                # 方法1: 尝试获取 .img img 元素
                 img_elem = item('.img img')
-                vod_pic = img_elem.attr('src') or img_elem.attr('data-src') or ''
-                if not vod_pic:
-                    # 尝试其他可能的图片选择器
-                    img_elem = item('img')
+                if img_elem:
                     vod_pic = img_elem.attr('src') or img_elem.attr('data-src') or ''
                 
+
+                
+                # 处理相对URL
                 if vod_pic and not vod_pic.startswith('http'):
                     vod_pic = urljoin(self.host, vod_pic)
                 
-                # 如果还是没有图片，使用默认图片
-                if not vod_pic:
-                    vod_pic = "https://asiangaylove.com/wp-content/themes/modown/static/img/thumbnail.png"
+                # 过滤掉占位符图片
+                if vod_pic and 'thumbnail.png' in vod_pic:
+                    vod_pic = ''
                 
                 # 获取时长
                 duration_elem = item('.post-sign')
@@ -134,10 +140,13 @@ class Spider(Spider):
 
     def homeContent(self, filter):
         cateManual = {
+            "首页": "/",
             "Asian": "/tag/asian/",
             "China": "/tag/china/",
             "Japan": "/tag/japan/",
-            "OnlyFans": "/category/onlyfans/"
+            "OnlyFans": "/category/onlyfans/",
+            "Gay Porn Video": "/category/gay-porn-video/",
+            "Pornhub": "/category/pornhub/"
         }
         classes = [{'type_name': k, 'type_id': v} for k, v in cateManual.items()]
         
