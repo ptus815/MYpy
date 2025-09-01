@@ -24,7 +24,10 @@ class Spider(Spider):
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'zh-CN,zh;q=0.8,en-US;q=0.3,en;q=0.2',
+            'Accept-Language': 'zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2',
+            'Connection': 'keep-alive',
+            'Sec-Fetch-Dest': 'document'
+           
         }
 
         self.host = "https://asiangaylove.com"
@@ -69,8 +72,17 @@ class Spider(Spider):
                 # 获取图片
                 img_elem = item('.img img')
                 vod_pic = img_elem.attr('src') or img_elem.attr('data-src') or ''
+                if not vod_pic:
+                    # 尝试其他可能的图片选择器
+                    img_elem = item('img')
+                    vod_pic = img_elem.attr('src') or img_elem.attr('data-src') or ''
+                
                 if vod_pic and not vod_pic.startswith('http'):
                     vod_pic = urljoin(self.host, vod_pic)
+                
+                # 如果还是没有图片，使用默认图片
+                if not vod_pic:
+                    vod_pic = "https://asiangaylove.com/wp-content/themes/modown/static/img/thumbnail.png"
                 
                 # 获取时长
                 duration_elem = item('.post-sign')
@@ -217,14 +229,21 @@ class Spider(Spider):
             'vod_remarks': vod_remarks,
             'vod_content': vod_content,
             'vod_tag': ', '.join(tags) if tags else "AsianGayLove",
-            'vod_play_from': 'AsianGayLove',
+            'vod_play_from': 'Push',
             'vod_play_url': f'播放${iframe_src}'
         }
         return {'list': [vod]}
 
     def playerContent(self, flag, id, vipFlags):
-        # 直接返回播放URL，不进行base64编码
-        play_url = id
+        # 如果id已经是URL，直接使用；如果是base64编码，则解码
+        try:
+            if id.startswith('http'):
+                play_url = id
+            else:
+                play_url = b64decode(id.encode('utf-8')).decode('utf-8')
+        except:
+            play_url = id
+        
         return {
             'parse': 1,
             'url': play_url,
