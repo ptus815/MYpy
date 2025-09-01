@@ -5,7 +5,7 @@
         "key": "GayVidsClub",
         "name": "VC",
         "type": 3,
-        "api": "https://raw.githubusercontent.com/ptus815/MYpy/refs/heads/main/plugin/adult/VC.py?token=GHSAT0AAAAAADKCJJZ73DJBKNSVN26AWAPK2FVU24A",
+        "api": "https://raw.githubusercontent.com/ptus815/MYpy/refs/heads/main/plugin/adult/VC.py",
         "searchable": 1,
         "quickSearch": 1,
         "filterable": 0,
@@ -15,7 +15,7 @@
         "key": "GayCock4U",
         "name": "4U",
         "type": 3,
-        "api": "https://raw.githubusercontent.com/ptus815/MYpy/e60b3d67cc4e84623391885dded7b9db2d8c4e27/plugin/adult/4U.py?token=GHSAT0AAAAAADKCJJZ7XQRNLZBY7WKTMXQM2FVU7NA",
+        "api": "https://raw.githubusercontent.com/ptus815/MYpy/refs/heads/main/plugin/adult/4U.py",
         "searchable": 1,
         "quickSearch": 1,
         "filterable": 0,
@@ -25,7 +25,7 @@
         "key": "asiangaylove",
         "name": "ag",
         "type": 3,
-        "api": "https://raw.githubusercontent.com/ptus815/MYpy/refs/heads/main/plugin/adult/ag.py?token=GHSAT0AAAAAADKCJJZ6PNZMGSGSV7WDZWVI2FVUZLA",
+        "api": "https://raw.githubusercontent.com/ptus815/MYpy/refs/heads/main/plugin/adult/ag.py",
         "searchable": 1,
         "quickSearch": 1,
         "filterable": 0,
@@ -39,7 +39,7 @@
         "key": "GayXTapes",
         "name": "XT",
         "type": 3,
-        "api": "https://raw.githubusercontent.com/ptus815/MYpy/e60b3d67cc4e84623391885dded7b9db2d8c4e27/plugin/adult/xt.py?token=GHSAT0AAAAAADKCJJZ7SD4TBFEZRVH6BZEY2FVU4LQ",
+        "api": "https://raw.githubusercontent.com/ptus815/MYpy/refs/heads/main/plugin/adult/xt.py",
         "searchable": 1,
         "quickSearch": 1,
         "filterable": 1,
@@ -401,3 +401,4 @@
   
 
   
+
