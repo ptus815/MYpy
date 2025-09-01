@@ -21,6 +21,16 @@
         "filterable": 0,
         "timeout": 60
       },
+	 {
+        "key": "asiangaylove",
+        "name": "ag",
+        "type": 3,
+        "api": "https://raw.githubusercontent.com/ptus815/PQ/refs/heads/main/plugin/adult/ag.py",
+        "searchable": 1,
+        "quickSearch": 1,
+        "filterable": 0,
+        "timeout": 60
+      },	
       {
         "key": "GayXTapes",
         "name": "XT",
