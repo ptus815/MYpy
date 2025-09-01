@@ -133,51 +133,7 @@ class Spider(Spider):
         data = self.getpq('/')
         vlist = self.getlist(data)
         
-        # 为OnlyFans分类生成筛选器
-        filters = {}
-        if 'OnlyFans' in cateManual:
-            filters['OnlyFans'] = {
-                'Country': {
-                    'name': 'Country',
-                    'key': 't',
-                    'value': [
-                        {'v': '', 'n': 'All'},
-                        {'v': '9', 'n': 'Asian'},
-                        {'v': '20', 'n': 'Brazil'},
-                        {'v': '14', 'n': 'China'},
-                        {'v': '24', 'n': 'Colombia'},
-                        {'v': '22', 'n': 'Hong Kong'},
-                        {'v': '17', 'n': 'India'},
-                        {'v': '25', 'n': 'Italy'},
-                        {'v': '12', 'n': 'Japan'},
-                        {'v': '19', 'n': 'Malaysia'},
-                        {'v': '23', 'n': 'Netherlands'},
-                        {'v': '18', 'n': 'Philippines'},
-                        {'v': '21', 'n': 'Singapore'},
-                        {'v': '13', 'n': 'South Korea'},
-                        {'v': '8', 'n': 'Taiwan'},
-                        {'v': '11', 'n': 'Thailand'},
-                        {'v': '16', 'n': 'United Kingdom'},
-                        {'v': '15', 'n': 'United States'},
-                        {'v': '10', 'n': 'Vietnam'}
-                    ]
-                },
-                'Sort': {
-                    'name': 'Sort',
-                    'key': 'o',
-                    'value': [
-                        {'v': '', 'n': 'Newest'},
-                        {'v': 'update', 'n': 'Updated'},
-                        {'v': 'recommend', 'n': 'Recommend'},
-                        {'v': 'download', 'n': 'Download'},
-                        {'v': 'view', 'n': 'Views'},
-                        {'v': 'comment', 'n': 'Comments'},
-                        {'v': 'rand', 'n': 'Random'}
-                    ]
-                }
-            }
-        
-        return {'class': classes, 'filters': filters, 'list': vlist}
+        return {'class': classes, 'list': vlist}
 
     def categoryContent(self, tid, pg, filter, extend):
         url = tid
@@ -186,19 +142,6 @@ class Spider(Spider):
                 url = f"{tid}page/{pg}/"
             elif '/category/' in tid:
                 url = f"{tid}page/{pg}/"
-        
-        # 处理筛选参数
-        if filter and extend:
-            params = []
-            for key, value in extend.items():
-                if value and value != '':
-                    if key == 't':  # Country
-                        params.append(f't={value}')
-                    elif key == 'o':  # Sort
-                        params.append(f'o={value}')
-            
-            if params:
-                url += '?' + '&'.join(params)
         
         data = self.getpq(url)
         vlist = self.getlist(data)
@@ -229,12 +172,19 @@ class Spider(Spider):
         duration_elem = data('.post-sign, .duration')
         vod_remarks = duration_elem.text().strip() if duration_elem else ''
         
-        # 获取分类
+        # 获取分类或标签（优先显示分类，如果没有分类则显示标签）
         cat_elem = data('.cat a, .article-meta .item-cats a')
-        vod_year = cat_elem.text().strip() if cat_elem else ''
+        tag_elem = data('.article-tags a, .tag a')
         
-        # 获取标签
-        tags = [tag.text().strip() for tag in data('.article-tags a, .tag a').items() if tag.text().strip()]
+        if cat_elem:
+            vod_year = cat_elem.text().strip()
+            tags = []  # 有分类时标签设为空
+        elif tag_elem:
+            vod_year = ''  # 没有分类时分类设为空
+            tags = [tag.text().strip() for tag in tag_elem.items() if tag.text().strip()]
+        else:
+            vod_year = ''
+            tags = []
         
         # 获取描述
         excerpt_elem = data('.excerpt')
