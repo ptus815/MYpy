@@ -12,10 +12,10 @@
         "timeout": 60
       },
       {
-        "key": "GayCock4U",
-        "name": "4U",
+        "key": "推特APP",
+        "name": "X",
         "type": 3,
-        "api": "https://raw.githubusercontent.com/ptus815/MYpy/refs/heads/main/plugin/adult/4U.py",
+        "api": "https://raw.githubusercontent.com/ptus815/PQ/refs/heads/main/plugin/adult/推特APP.py",
         "searchable": 1,
         "quickSearch": 1,
         "filterable": 0,
@@ -397,5 +397,6 @@
   
 
   
+
 
 
