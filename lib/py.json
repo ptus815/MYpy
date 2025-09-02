@@ -15,15 +15,13 @@
       "key": "推特APPpy",
       "name": "X",
       "type": 3,
-      "api": "https://raw.githubusercontent.com/ptus815/PQ/refs/heads/main/plugin/adult/推特APP.py",
-      "categories": [
-        "男同"
-      ],
+      "api": "https://raw.githubusercontent.com/ptus815/MYpy/refs/heads/main/plugin/adult/%E6%8E%A8%E7%89%B9APP.py",
+      "categories": ["男同"],
       "searchable": 1,
       "quickSearch": 1,
       "filterable": 1
-    },
-	 {
+      },
+	    {
         "key": "asiangaylove",
         "name": "ag",
         "type": 3,
@@ -399,7 +397,6 @@
   
 
   
-
 
 
 
