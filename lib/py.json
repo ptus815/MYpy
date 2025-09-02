@@ -12,15 +12,17 @@
         "timeout": 60
       },
       {
-        "key": "推特APP",
-        "name": "X",
-        "type": 3,
-        "api": "https://raw.githubusercontent.com/ptus815/PQ/refs/heads/main/plugin/adult/推特APP.py",
-        "searchable": 1,
-        "quickSearch": 1,
-        "filterable": 0,
-        "timeout": 60
-      },
+      "key": "推特APPpy",
+      "name": "X",
+      "type": 3,
+      "api": "https://raw.githubusercontent.com/ptus815/PQ/refs/heads/main/plugin/adult/推特APP.py",
+      "categories": [
+        "男同"
+      ],
+      "searchable": 1,
+      "quickSearch": 1,
+      "filterable": 1
+    },
 	 {
         "key": "asiangaylove",
         "name": "ag",
@@ -397,6 +399,7 @@
   
 
   
+
 
 
 
