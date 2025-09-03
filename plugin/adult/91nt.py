@@ -106,11 +106,14 @@ class Spider(Spider):
                 poster_div = item.xpath('.//div[contains(@class, "poster")]')
                 if poster_div:
                     ds = poster_div[0].xpath('.//img/@data-src')
+                    ss = poster_div[0].xpath('.//img/@src')
+                    # 优先 data-src；若 src 为 blob 或占位图，则回退 data-src
                     if ds:
                         img = ds[0]
-                    else:
-                        ss = poster_div[0].xpath('.//img/@src')
-                        img = ss[0] if ss else ''
+                    if ss:
+                        src_val = ss[0]
+                        if not img or src_val.startswith('blob:') or 'poster_loading' in src_val:
+                            img = ds[0] if ds else src_val
                 if img.startswith('//'):
                     img = 'https:' + img
                 
@@ -125,7 +128,8 @@ class Spider(Spider):
                 tag = '、'.join(tags) if tags else ""
                 
                 videos.append({
-                    "vod_id": vid,
+                    # 盒子兼容性更好：直接用相对路径作为 id
+                    "vod_id": href,
                     "vod_name": title,
                     "vod_pic": img,
                     "vod_remarks": duration,
@@ -197,8 +201,15 @@ class Spider(Spider):
         return result
 
     def detailContent(self, ids):
-        vid = ids[0]
-        url = f"{self.site}/videos/{vid}"
+        # 兼容传入相对路径或仅 vid
+        raw = ids[0]
+        if raw.startswith('http'):
+            url = raw
+        elif raw.startswith('/'):
+            url = f"{self.site}{raw}"
+        else:
+            url = f"{self.site}/videos/{raw}"
+        vid = url.rstrip('/').split('/')[-1]
         
         rsp = self.fetch(url, headers=self.headers)
         root = self.html(rsp.text)
@@ -269,6 +280,18 @@ class Spider(Spider):
         return self.fetchVideoContent(url)
 
     def playerContent(self, flag, id, vipFlags):
+        # id 可能是相对路径或完整 m3u8
+        if id.startswith('/videos/') and not id.endswith('.m3u8'):
+            detail = self.detailContent([id])
+            if detail and detail.get('list'):
+                play_line = detail['list'][0].get('vod_play_url', '')
+                play_url = play_line.split('$', 1)[-1] if '$' in play_line else play_line
+                return {
+                    'parse': 0,
+                    'url': play_url,
+                    'header': self.headers
+                }
+
         if id.startswith('http'):
             return {
                 'parse': 0,
