@@ -21,6 +21,8 @@ class Spider(Spider):
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0', #
             'Accept': '*/*', #
             'Accept-Encoding': 'gzip, deflate, br', #
+            'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+            'Origin': self.site,
             'Referer': self.site,
         }
         # --- MODIFICATION END ---
@@ -57,6 +59,12 @@ class Spider(Spider):
                 'type_id': cateManual[k]
             })
         result['class'] = classes
+        # 一些盒子首页需要同时返回推荐视频列表
+        try:
+            hv = self.fetchVideoContent(f"{self.site}/videos/all/popular")
+            result['list'] = hv.get('list', [])
+        except Exception:
+            result['list'] = []
         return result
 
     def homeVideoContent(self):
