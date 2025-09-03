@@ -98,10 +98,10 @@ class Spider(Spider):
                 href = href_nodes[0]
                 vid = href.rstrip('/').split('/')[-1]
                 
-                # 视频标题
+             
                 title = item.xpath('.//a[contains(@href, "/videos/vd-")]/@title')[0] if item.xpath('.//a[contains(@href, "/videos/vd-")]/@title') else ''.join(item.xpath('.//a[contains(@href, "/videos/vd-")]//text()')).strip()
                 
-                # 视频封面
+                
                 img = ''
                 poster_div = item.xpath('.//div[contains(@class, "poster")]')
                 if poster_div:
@@ -117,18 +117,18 @@ class Spider(Spider):
                 if img.startswith('//'):
                     img = 'https:' + img
                 
-                # 视频时长
+               
                 duration = ''
                 duration_nodes = item.xpath('.//div[contains(@class, "poster")]//div[contains(@class, "text-white") or contains(@class, "text-sm")]/text()')
                 if duration_nodes:
                     duration = duration_nodes[0].strip()
                 
-                # 标签
+            
                 tags = item.xpath('.//div[contains(@class, "dx-subtitle")]//strong/text()')
                 tag = '、'.join(tags) if tags else ""
                 
                 videos.append({
-                    # 盒子兼容性更好：直接用相对路径作为 id
+                  
                     "vod_id": href,
                     "vod_name": title,
                     "vod_pic": img,
@@ -140,7 +140,7 @@ class Spider(Spider):
                 print(f"解析视频项时出错: {e}")
                 continue
         
-        # 如果主选择器未命中，尝试全页回退提取
+       
         if not videos:
             anchors = root.xpath('//a[contains(@href, "/videos/vd-")]')
             seen = set()
@@ -157,7 +157,7 @@ class Spider(Spider):
                     title_nodes = a.xpath('./@title')
                     title = title_nodes[0].strip() if title_nodes else (''.join(a.xpath('.//text()')).strip() or vid)
 
-                    # 向上查找封面和时长
+                    
                     parent = a.getparent()
                     img = ''
                     duration = ''
