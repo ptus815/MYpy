@@ -1,309 +1,211 @@
-
-import sys
-import re
+# -*- coding: utf-8 -*-
+# by @ao - 91nt 爬虫插件
 import json
-import time
-import urllib.parse
-import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
-from base.spider import Spider
+import re
+import sys
+from urllib.parse import urljoin, urlencode
+from requests import Session
+from pyquery import PyQuery as pq
+
+sys.path.append('..')
+from base.spider import Spider  # noqa: E402
 
 
 class Spider(Spider):
     def init(self, extend=""):
-        # 兼容盒子传入 list 的情况
-        if not isinstance(extend, dict):
-            extend = {}
-        self.site = extend.get('site', 'https://91nt.com')
-        # --- MODIFICATION START ---
-        # 根据您提供的最新截图更新请求头
-        self.headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0', #
-            'Accept': '*/*', #
-            'Accept-Encoding': 'gzip, deflate, br', #
-            'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-            'Origin': self.site,
-            'Referer': self.site,
+        try:
+            self.proxies = json.loads(extend) if extend else {}
+        except Exception:
+            self.proxies = {}
+        if isinstance(self.proxies, dict) and 'proxy' in self.proxies:
+            self.proxies = self.proxies['proxy']
+        # 兼容 http/https 代理前缀
+        self.proxies = {
+            k: (v if isinstance(v, str) and v.startswith('http') else f'http://{v}')
+            for k, v in self.proxies.items()
         }
-        # --- MODIFICATION END ---
+
+        self.host = 'https://91nt.com'
+        self.headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+        }
+
+        self.session = Session()
+        self.session.headers.update(self.headers)
+        if isinstance(self.proxies, dict) and self.proxies:
+            self.session.proxies.update(self.proxies)
 
     def getName(self):
-        return "91nt"
+        return '91nt'
 
     def isVideoFormat(self, url):
-        return ('.m3u8' in url) or ('.mp4' in url)
+        return isinstance(url, str) and ('.m3u8' in url or url.endswith('.mp4') or '.mp4' in url)
 
     def manualVideoCheck(self):
         return True
 
     def destroy(self):
-        pass
+        try:
+            self.session.close()
+        except Exception:
+            pass
+
+    def _getpq(self, path_or_url=''):
+        url = path_or_url if path_or_url.startswith('http') else urljoin(self.host, path_or_url)
+        try:
+            resp = self.session.get(url, timeout=15)
+            resp.encoding = 'utf-8' if resp.encoding in (None, 'ISO-8859-1') else resp.encoding
+            return pq(resp.text)
+        except Exception:
+            return pq('')
+
+    def _parse_vlist(self, root_sel):
+        vlist = []
+        for item in root_sel.items():
+            try:
+                link = item('a').eq(0)
+                href = link.attr('href') or ''
+                if not href:
+                    continue
+                title_link = item('a').eq(1) if item('a').length > 1 else link
+                name = title_link.text().strip() or link.text().strip()
+                img = item('img').eq(0)
+                pic = (img.attr('data-src') or img.attr('src') or '').strip()
+                if pic and not pic.startswith('http'):
+                    pic = urljoin(self.host, pic)
+                # 时长在封面底部的小块里
+                duration = item('.text-sm').text().strip() if item('.text-sm').length else ''
+
+                vlist.append({
+                    'vod_id': href if href.startswith('http') else urljoin(self.host, href),
+                    'vod_name': name,
+                    'vod_pic': pic,
+                    'vod_year': '',
+                    'vod_remarks': duration,
+                    'style': {'ratio': 1.78, 'type': 'rect'}
+                })
+            except Exception:
+                continue
+        return vlist
 
     def homeContent(self, filter):
-        result = {}
         cateManual = {
-            "精选G片": "/videos/all/watchings",
-            "男同黑料": "/posts/category/all",
-            "鲜肉薄肌": "/videos/category/xrbj",
-            "无套内射": "/videos/category/wtns",
-            "制服诱惑": "/videos/category/zfyh",
-            "耽美天菜": "/videos/category/dmfj",
-            "肌肉猛男": "/videos/category/jrmn",
-            "日韩GV": "/videos/category/rhgv",
-            "欧美巨屌": "/videos/category/omjd",
-            "多人群交": "/videos/category/drqp",
-            "口交颜射": "/videos/category/kjys",
-            "调教SM": "/videos/category/tjsm"
+           
+            '精选G片': '/videos/all/watchings',
+            '男同黑料': '/posts/category/all',
+            '热搜词': '/hot/1',
+            '鲜肉薄肌': '/videos/category/xrbj',
+            '无套内射': '/videos/category/wtns',
+            '制服诱惑': '/videos/category/zfyh',
+            '耽美天菜': '/videos/category/dmfj',
+            '肌肉猛男': '/videos/category/jrmn',
+            '日韩GV': '/videos/category/rhgv',
+            '欧美巨屌': '/videos/category/omjd',
+            '多人群交': '/videos/category/drqp',
+            '口交颜射': '/videos/category/kjys',
         }
-        classes = []
-        for k in cateManual:
-            classes.append({
-                'type_name': k,
-                'type_id': cateManual[k]
-            })
-        result['class'] = classes
-        result['filters'] = {}
-        # 一些盒子首页需要同时返回推荐视频列表
-        try:
-            hv = self.fetchVideoContent(f"{self.site}/videos/all/popular")
-            result['list'] = hv.get('list', [])
-        except Exception:
-            result['list'] = []
-        return result
+        classes = [{'type_name': k, 'type_id': v} for k, v in cateManual.items()]
 
-    def homeVideoContent(self):
-        url = f"{self.site}/videos/all/popular"
-        return self.fetchVideoContent(url)
+        doc = self._getpq('/')
+        vlist = self._parse_vlist(doc('div.video-item'))
+        return {'class': classes, 'filters': {}, 'list': vlist}
 
     def categoryContent(self, tid, pg, filter, extend):
-        if pg == '':
-            pg = '1'
-        url = f"{self.site}{tid}?page={pg}"
-        return self.fetchVideoContent(url)
-
-    def fetchVideoContent(self, url):
-        rsp = self.fetch(url, headers=self.headers)
-        root = self.html(rsp.text)
-        videos = []
-        
-        # 获取视频列表（统一使用首页/分类/搜索的结构）
-        items = root.xpath('//ul[contains(@class, "video-items")]//div[contains(@class, "video-item")]')
-        
-        for item in items:
-            try:
-                # 视频链接和ID
-                href_nodes = item.xpath('.//a[contains(@href, "/videos/vd-")]/@href')
-                if not href_nodes:
-                    continue
-                href = href_nodes[0]
-                vid = href.rstrip('/').split('/')[-1]
-                
-             
-                title = item.xpath('.//a[contains(@href, "/videos/vd-")]/@title')[0] if item.xpath('.//a[contains(@href, "/videos/vd-")]/@title') else ''.join(item.xpath('.//a[contains(@href, "/videos/vd-")]//text()')).strip()
-                
-                
-                img = ''
-                poster_div = item.xpath('.//div[contains(@class, "poster")]')
-                if poster_div:
-                    ds = poster_div[0].xpath('.//img/@data-src')
-                    ss = poster_div[0].xpath('.//img/@src')
-                    # 优先 data-src；若 src 为 blob 或占位图，则回退 data-src
-                    if ds:
-                        img = ds[0]
-                    if ss:
-                        src_val = ss[0]
-                        if not img or src_val.startswith('blob:') or 'poster_loading' in src_val:
-                            img = ds[0] if ds else src_val
-                if img.startswith('//'):
-                    img = 'https:' + img
-                
-               
-                duration = ''
-                duration_nodes = item.xpath('.//div[contains(@class, "poster")]//div[contains(@class, "text-white") or contains(@class, "text-sm")]/text()')
-                if duration_nodes:
-                    duration = duration_nodes[0].strip()
-                
-            
-                tags = item.xpath('.//div[contains(@class, "dx-subtitle")]//strong/text()')
-                tag = '、'.join(tags) if tags else ""
-                
-                videos.append({
-                  
-                    "vod_id": href,
-                    "vod_name": title,
-                    "vod_pic": img,
-                    "vod_remarks": duration,
-                    "vod_tag": tag,
-                    "style": {"type": "rect", "ratio": 1.33}
-                })
-            except Exception as e:
-                print(f"解析视频项时出错: {e}")
-                continue
-        
-       
-        if not videos:
-            anchors = root.xpath('//a[contains(@href, "/videos/vd-")]')
-            seen = set()
-            for a in anchors:
-                try:
-                    hrefs = a.xpath('./@href')
-                    if not hrefs:
-                        continue
-                    href = hrefs[0]
-                    if href in seen:
-                        continue
-                    seen.add(href)
-                    vid = href.rstrip('/').split('/')[-1]
-                    title_nodes = a.xpath('./@title')
-                    title = title_nodes[0].strip() if title_nodes else (''.join(a.xpath('.//text()')).strip() or vid)
-
-                    
-                    parent = a.getparent()
-                    img = ''
-                    duration = ''
-                    safety = 0
-                    while parent is not None and parent.tag != 'body' and safety < 6:
-                        safety += 1
-                        img_nodes = parent.xpath('.//img/@data-src') or parent.xpath('.//img/@src')
-                        if img_nodes:
-                            img = img_nodes[0]
-                        dur_nodes = parent.xpath('.//div/text()')
-                        if dur_nodes and not duration:
-                            for dn in dur_nodes:
-                                t = (dn or '').strip()
-                                if ':' in t and 3 <= len(t) <= 8:
-                                    duration = t
-                                    break
-                        if img or duration:
-                            break
-                        parent = parent.getparent()
-                    if img.startswith('//'):
-                        img = 'https:' + img
-
-                    videos.append({
-                        "vod_id": vid,
-                        "vod_name": title,
-                        "vod_pic": img,
-                        "vod_remarks": duration,
-                        "vod_tag": "",
-                        "style": {"type": "rect", "ratio": 1.33}
-                    })
-                except Exception:
-                    continue
-
-        result = {
-            'list': videos,
-            'page': 1,
-            'pagecount': 9999,
-            'limit': 90,
-            'total': 999999
-        }
-        return result
-
-    def detailContent(self, ids):
-        # 兼容传入相对路径或仅 vid
-        raw = ids[0]
-        if raw.startswith('http'):
-            url = raw
-        elif raw.startswith('/'):
-            url = f"{self.site}{raw}"
-        else:
-            url = f"{self.site}/videos/{raw}"
-        vid = url.rstrip('/').split('/')[-1]
-        
-        rsp = self.fetch(url, headers=self.headers)
-        root = self.html(rsp.text)
-        
-        # 根据您的需求，我们优先从 <div id="mse"> 中提取封面和播放地址
-        play_info_element = root.xpath('//div[@id="mse"]')
-        
-        if play_info_element:
-            # 成功找到关键信息元素
-            play_url = play_info_element[0].xpath('./@data-url')[0]
-            pic = play_info_element[0].xpath('./@data-poster')[0]
-        else:
-            # 如果没有找到，使用备用方案
-            play_url = self.extractVideoUrl(rsp.text)
-            pic = root.xpath('//meta[@property="og:image"]/@content')[0] if root.xpath('//meta[@property="og:image"]/@content') else ""
-
-        # 获取视频标题
-        title = root.xpath('//h1/text()')[0] if root.xpath('//h1/text()') else vid
-        
-        # 获取视频描述
-        desc = root.xpath('//meta[@property="og:description"]/@content')[0] if root.xpath('//meta[@property="og:description"]/@content') else ""
-        # 获取视频标签
-        tags = root.xpath('//a[contains(@href, "/videos/tag/")]/strong/text()')
-        tag = '、'.join(tags) if tags else ""
-        
-        vod = {
-            "vod_id": vid,
-            "vod_name": title,
-            "vod_pic": pic,
-            "type_name": tag,
-            "vod_year": "",
-            "vod_area": "",
-            "vod_remarks": "",
-            "vod_actor": "",
-            "vod_director": "",
-            "vod_content": desc,
-            "vod_play_from": "91nt",
-            "vod_play_url": "播放$" + play_url
-        }
-        
-        result = {
-            'list': [vod]
-        }
-        return result
-
-    def extractVideoUrl(self, html_content):
-        # 这是一个备用方法，当新的提取逻辑失败时可能会被调用
-        video_url = re.search(r'<video[^>]*src=[\'"]([^\'"]+)[\'"]', html_content)
-        if video_url:
-            return video_url.group(1)
-        
-        video_url = re.search(r'source\s*src=[\'"]([^\'"]+)[\'"]', html_content)
-        if video_url:
-            return video_url.group(1)
-        
-        video_url = re.search(r'videoUrl\s*=\s*[\'"]([^\'"]+)[\'"]', html_content)
-        if video_url:
-            return video_url.group(1)
-        
-        video_url = re.search(r'[\'"]([^\'"]*.m3u8[^\'"]*)[\'"]', html_content)
-        if video_url:
-            return video_url.group(1)
-        
-        return ""
+        try:
+            page = int(pg) if isinstance(pg, str) else (pg or 1)
+        except Exception:
+            page = 1
+        url = tid if tid.startswith('http') else urljoin(self.host, tid)
+        if page and page > 1:
+            joiner = '&' if ('?' in url) else '?'
+            url = f"{url}{joiner}page={page}"
+        doc = self._getpq(url)
+        vlist = self._parse_vlist(doc('div.video-item'))
+        return {'list': vlist, 'page': str(page), 'pagecount': 9999, 'limit': 90, 'total': 999999}
 
     def searchContent(self, key, quick, pg="1"):
-        url = f"{self.site}/videos/search/{urllib.parse.quote(key)}?page={pg}"
-        return self.fetchVideoContent(url)
+        try:
+            page = int(pg) if isinstance(pg, str) else (pg or 1)
+        except Exception:
+            page = 1
+        # 站点的结构允许 /videos/search/{kw}
+        path = f"/videos/search/{key}"
+        url = urljoin(self.host, path)
+        if page and page > 1:
+            url = f"{url}?{urlencode({'page': page})}"
+        doc = self._getpq(url)
+        vlist = self._parse_vlist(doc('div.video-item'))
+        return {'list': vlist, 'page': str(page)}
+
+    def detailContent(self, ids):
+        # 详情页中可直接在源码中用正则提取 data-url="...m3u8"
+        url = ids[0]
+        d = self._getpq(url)
+        title = d('h1').text().strip() or d('h1.title-detail').text().strip() or ''
+
+        # 尝试直接通过正则从页面源码中抓取 data-url
+        try:
+            # 直接请求文本
+            resp = self.session.get(url, timeout=15)
+            html = resp.text
+        except Exception:
+            html = d.html() or ''
+
+        video_urls = []
+        for m in re.finditer(r'data-url\s*=\s*"([^"]+\.m3u8[^"]*)"', html):
+            play = m.group(1)
+            if play and play.startswith('http'):
+                video_urls.append(play)
+        # 兜底：有些详情里也可能嵌在列表块
+        if not video_urls:
+            data_url = d('.poster').attr('data-url') or ''
+            if data_url and data_url.startswith('http'):
+                video_urls.append(data_url)
+
+        video_urls = list(dict.fromkeys(video_urls))  # 去重并保持顺序
+        if not video_urls:
+            # 若未解析到直链，回退为原页面链接交由解析
+            video_urls = [url]
+
+        play_from = '91nt'
+        # 只取第一个视频链接，不合并多条线路
+        play_url = video_urls[0] if video_urls else url
+
+        vod = {
+            'vod_name': title or '91nt',
+            'type_name': '',
+            'vod_content': '91nt',
+            'vod_play_from': play_from,
+            'vod_play_url': play_url
+        }
+        return {'list': [vod]}
 
     def playerContent(self, flag, id, vipFlags):
-        # id 可能是相对路径或完整 m3u8
-        if id.startswith('/videos/') and not id.endswith('.m3u8'):
-            detail = self.detailContent([id])
-            if detail and detail.get('list'):
-                play_line = detail['list'][0].get('vod_play_url', '')
-                play_url = play_line.split('$', 1)[-1] if '$' in play_line else play_line
-                return {
-                    'parse': 0,
-                    'url': play_url,
-                    'header': self.headers
-                }
-
-        if id.startswith('http'):
+        play_url = id
+        if self.isVideoFormat(play_url):
             return {
                 'parse': 0,
-                'url': id,
-                'header': self.headers
+                'url': play_url,
+                'header': {
+                    'User-Agent': self.headers['User-Agent'],
+                    'Referer': self.host,
+                }
             }
-        
+        # 不是直链时，交由外部解析
         return {
             'parse': 1,
-            'url': id,
-            'header': self.headers
+            'url': play_url,
+            'header': {
+                'User-Agent': self.headers['User-Agent'],
+                'Referer': self.host,
+            }
         }
 
     def localProxy(self, param):
         return None
+
+
