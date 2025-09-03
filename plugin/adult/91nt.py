@@ -166,16 +166,24 @@ class Spider(Spider):
             if data_url and data_url.startswith('http'):
                 video_urls.append(data_url)
 
-        # 提取封面图
+        # 提取封面图 - 从详情页的 .poster img 的 data-src 属性获取
         pic = ''
-        for m in re.finditer(r'data-poster\s*=\s*"([^"]+)"', html):
-            poster = m.group(1)
-            if poster and poster.startswith('http'):
-                pic = poster
-                break
-        # 兜底：从DOM中获取
+        # 首先尝试从 .poster img 的 data-src 获取
+        poster_img = d('.poster img')
+        if poster_img.length:
+            pic = poster_img.attr('data-src') or ''
+        
+        # 如果没找到，尝试从页面源码中正则提取 data-src
         if not pic:
-            pic = d('.poster').attr('data-poster') or d('img').eq(0).attr('src') or ''
+            for m in re.finditer(r'data-src\s*=\s*"([^"]+\.(?:jpeg|jpg|png|gif|webp)[^"]*)"', html):
+                poster = m.group(1)
+                if poster and poster.startswith('http'):
+                    pic = poster
+                    break
+        
+        # 兜底：从其他img标签获取
+        if not pic:
+            pic = d('img').eq(0).attr('data-src') or d('img').eq(0).attr('src') or ''
             if pic and not pic.startswith('http'):
                 pic = urljoin(self.host, pic)
 
