@@ -31,9 +31,12 @@ class Spider(Spider):
         return "91nt"
 
     def isVideoFormat(self, url):
-        pass
+        return ('.m3u8' in url) or ('.mp4' in url)
 
     def manualVideoCheck(self):
+        return True
+
+    def destroy(self):
         pass
 
     def homeContent(self, filter):
@@ -59,6 +62,7 @@ class Spider(Spider):
                 'type_id': cateManual[k]
             })
         result['class'] = classes
+        result['filters'] = {}
         # 一些盒子首页需要同时返回推荐视频列表
         try:
             hv = self.fetchVideoContent(f"{self.site}/videos/all/popular")
@@ -132,6 +136,57 @@ class Spider(Spider):
                 print(f"解析视频项时出错: {e}")
                 continue
         
+        # 如果主选择器未命中，尝试全页回退提取
+        if not videos:
+            anchors = root.xpath('//a[contains(@href, "/videos/vd-")]')
+            seen = set()
+            for a in anchors:
+                try:
+                    hrefs = a.xpath('./@href')
+                    if not hrefs:
+                        continue
+                    href = hrefs[0]
+                    if href in seen:
+                        continue
+                    seen.add(href)
+                    vid = href.rstrip('/').split('/')[-1]
+                    title_nodes = a.xpath('./@title')
+                    title = title_nodes[0].strip() if title_nodes else (''.join(a.xpath('.//text()')).strip() or vid)
+
+                    # 向上查找封面和时长
+                    parent = a.getparent()
+                    img = ''
+                    duration = ''
+                    safety = 0
+                    while parent is not None and parent.tag != 'body' and safety < 6:
+                        safety += 1
+                        img_nodes = parent.xpath('.//img/@data-src') or parent.xpath('.//img/@src')
+                        if img_nodes:
+                            img = img_nodes[0]
+                        dur_nodes = parent.xpath('.//div/text()')
+                        if dur_nodes and not duration:
+                            for dn in dur_nodes:
+                                t = (dn or '').strip()
+                                if ':' in t and 3 <= len(t) <= 8:
+                                    duration = t
+                                    break
+                        if img or duration:
+                            break
+                        parent = parent.getparent()
+                    if img.startswith('//'):
+                        img = 'https:' + img
+
+                    videos.append({
+                        "vod_id": vid,
+                        "vod_name": title,
+                        "vod_pic": img,
+                        "vod_remarks": duration,
+                        "vod_tag": "",
+                        "style": {"type": "rect", "ratio": 1.33}
+                    })
+                except Exception:
+                    continue
+
         result = {
             'list': videos,
             'page': 1,
