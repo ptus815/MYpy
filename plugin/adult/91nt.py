@@ -77,7 +77,7 @@ class Spider(Spider):
                 pic = (img.attr('data-src') or img.attr('src') or '').strip()
                 if pic and not pic.startswith('http'):
                     pic = urljoin(self.host, pic)
-                # 时长在封面底部的小块里
+                
                 duration = item('.text-sm').text().strip() if item('.text-sm').length else ''
 
                 vlist.append({
@@ -147,7 +147,7 @@ class Spider(Spider):
         d = self._getpq(url)
         title = d('h1').text().strip() or d('h1.title-detail').text().strip() or ''
 
-        # 尝试直接通过正则从页面源码中抓取 data-url
+        # 尝试直接通过正则从页面源码中抓取 data-url 和 data-poster
         try:
             # 直接请求文本
             resp = self.session.get(url, timeout=15)
@@ -166,19 +166,33 @@ class Spider(Spider):
             if data_url and data_url.startswith('http'):
                 video_urls.append(data_url)
 
+        # 提取封面图
+        pic = ''
+        for m in re.finditer(r'data-poster\s*=\s*"([^"]+)"', html):
+            poster = m.group(1)
+            if poster and poster.startswith('http'):
+                pic = poster
+                break
+        # 兜底：从DOM中获取
+        if not pic:
+            pic = d('.poster').attr('data-poster') or d('img').eq(0).attr('src') or ''
+            if pic and not pic.startswith('http'):
+                pic = urljoin(self.host, pic)
+
         video_urls = list(dict.fromkeys(video_urls))  # 去重并保持顺序
         if not video_urls:
             # 若未解析到直链，回退为原页面链接交由解析
             video_urls = [url]
 
         play_from = '91nt'
-        # 只取第一个视频链接，不合并多条线路
+       
         play_url = video_urls[0] if video_urls else url
 
         vod = {
             'vod_name': title or '91nt',
             'type_name': '',
             'vod_content': '91nt',
+            'vod_pic': pic,
             'vod_play_from': play_from,
             'vod_play_url': play_url
         }
