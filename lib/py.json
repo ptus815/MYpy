@@ -1,5 +1,6 @@
 {
   "spider":"./jar/pg.jar;md5;53f3b78536ec7e974a94aa9b4ec2476f",
+  "logo": "./plugin/logo.gif",
   "sites": [
     {
       "key": "GayVidsClub",
@@ -403,6 +404,7 @@
   ],
   "ads": []
 }
+
 
 
 
