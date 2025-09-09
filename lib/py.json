@@ -22,11 +22,20 @@
     "quickSearch": 1,
     "filterable": 1
     },
- {
+   {
     "key": "Xhm",
     "name": "Xhm",
     "type": 3,
     "api": "https://raw.githubusercontent.com/ptus815/MYpy/refs/heads/main/plugin/adult/Xhm.py",      
+    "searchable": 1,
+    "quickSearch": 1,
+    "filterable": 1
+    },
+    {
+    "key": "stgay",
+    "name": "搜同",
+    "type": 3,
+    "api": "https://raw.githubusercontent.com/ptus815/MYpy/refs/heads/main/plugin/adult/st.py",      
     "searchable": 1,
     "quickSearch": 1,
     "filterable": 1
@@ -404,6 +413,7 @@
   ],
   "ads": []
 }
+
 
 
 
