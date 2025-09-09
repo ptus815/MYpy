@@ -32,14 +32,18 @@
     "filterable": 1
     },
     {
-    "key": "stgay",
-    "name": "搜同",
-    "type": 3,
-    "api": "https://raw.githubusercontent.com/ptus815/MYpy/refs/heads/main/plugin/adult/st.py",      
-    "searchable": 1,
-    "quickSearch": 1,
-    "filterable": 1
-    },
+  "key": "stgay",
+  "name": "stgay",
+  "type": 3,
+  "api": "./plugin/adult/st.py",
+  "searchable": 1,
+  "quickSearch": 1,
+  "filterable": 1,
+  "style": {
+    "type": "rect",
+    "ratio": 1.33
+  }
+},
     {
       "key": "asiangaylove",
       "name": "ag",
@@ -413,6 +417,7 @@
   ],
   "ads": []
 }
+
 
 
 
