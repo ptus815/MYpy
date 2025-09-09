@@ -50,12 +50,12 @@ class Spider(Spider):
         pass
     
     def update_cookies(self):
-        
+        """更新Cookie以应对Cloudflare验证"""
         try:
             
             resp = self.session.get(self.host, timeout=15)
             if resp.status_code == 200:
-                
+                # 提取cf_clearance cookie
                 cf_cookie = resp.cookies.get('cf_clearance')
                 if cf_cookie:
                     self.session.cookies.set('cf_clearance', cf_cookie)
@@ -81,7 +81,7 @@ class Spider(Spider):
                 else:
                     headers['Referer'] = self.host + path
             
-            
+            # 更新session的headers
             self.session.headers.update(headers)
             
             resp = self.session.get(url, timeout=15)
@@ -98,14 +98,14 @@ class Spider(Spider):
         if not url:
             return False
         
-        
+        # 检查是否是广告域名
         ad_domains = ['cam4.com', 'landers.cam4.com', 'juicyads.com', 'adultfriendfinder.com', 
                      'livejasmin.com', 'chaturbate.com', 'myfreecams.com', 'stripchat.com',
                      'kimmy.faduz.xyz', 'kra.timbuk.online', 'ava.lazumi.online', 'wa.astorix.online']
         if any(domain in url.lower() for domain in ad_domains):
             return False
         
-        
+        # 检查是否是广告路径
         ad_paths = ['/ads/', '/ad/', '/banner/', '/sponsor/', '/promo/', '/affiliate/', 
                    '/click/', '/track/', '/redirect/']
         if any(path in url.lower() for path in ad_paths):
@@ -113,7 +113,7 @@ class Spider(Spider):
         
         
         if url.startswith('http') and self.host not in url:
-            
+            # 允许一些可信的外部视频域名
             trusted_domains = ['youtube.com', 'vimeo.com', 'dailymotion.com', '74k.io', '88z.io']
             if not any(domain in url.lower() for domain in trusted_domains):
                 return False
@@ -124,7 +124,7 @@ class Spider(Spider):
         vlist = []
         for i in selector.items():
             try:
-                
+                # 过滤广告元素
                 if i('iframe').length > 0 or 'Ad' in i.text() or 'ad' in i.text():
                     continue
                 
@@ -141,7 +141,7 @@ class Spider(Spider):
                 if not vod_url or not vod_name:
                     continue
                 
-                
+                # 验证视频URL
                 if not self.is_valid_video_url(vod_url):
                     continue
                 
@@ -154,10 +154,10 @@ class Spider(Spider):
                 if any(keyword in vod_name.lower() for keyword in ad_keywords):
                     continue
                 
-                
+                # 获取图片 - 使用更精确的选择器
                 img_elem = i('img').eq(0)
                 if img_elem:
-                    
+                    # 尝试多种图片属性
                     vod_pic = (img_elem.attr('src') or 
                               img_elem.attr('data-src') or 
                               img_elem.attr('data-original') or 
@@ -165,18 +165,18 @@ class Spider(Spider):
                               img_elem.attr('data-lazy-src') or 
                               img_elem.attr('data-srcset') or '')
                     
-                    
+                    # 处理srcset属性
                     if not vod_pic and img_elem.attr('srcset'):
                         srcset = img_elem.attr('srcset')
                         if srcset:
-                            
+                            # 取第一个图片URL
                             vod_pic = srcset.split(',')[0].split(' ')[0].strip()
                     
-                    
+                    # 处理相对路径
                     if vod_pic and not vod_pic.startswith('http'):
                         vod_pic = urljoin(self.host, vod_pic)
                     
-                    
+                    # 验证图片URL - 只过滤明显的广告图片
                     if vod_pic:
                         ad_domains = ['cam4.com', 'landers.cam4.com', 'juicyads.com', 'adultfriendfinder.com']
                         if any(domain in vod_pic.lower() for domain in ad_domains):
@@ -185,7 +185,7 @@ class Spider(Spider):
                     vod_pic = ''
                 
                 
-    
+                # 查找包含时间格式的元素 (如 00:37:19)
                 duration_elem = i('div').filter(lambda idx, elem: 
                     ':' in pq(elem).text() and 
                     len(pq(elem).text().strip()) <= 10 and
@@ -193,7 +193,7 @@ class Spider(Spider):
                 ).eq(0)
                 vod_remarks = duration_elem.text().strip() if duration_elem else ''
                 
-                
+                # 获取评分 - 查找数字评分
                 rating_elem = i('div').filter(lambda idx, elem: 
                     pq(elem).text().strip().isdigit() and 
                     len(pq(elem).text().strip()) <= 3 and
@@ -223,8 +223,10 @@ class Spider(Spider):
             "MAP": "/category/742158/",
             "OF": "/category/621397/",
             "Full Movies": "/category/porn-movies-214660/",
-            "父子": "/category/491618/",
-            "ND": "/category/675418/"
+            "父子": "/category/491636/",
+            "ND": "/category/675418/",
+            "肖恩": "/category/341893/",
+            
         }
         classes = [{'type_name': k, 'type_id': v} for k, v in cateManual.items()]
         
@@ -267,10 +269,10 @@ class Spider(Spider):
         
         title = data('h1').text().strip()
         
-        
+        # 获取标签
         tags = [tag.text().strip() for tag in data('a[href*="/category/"]').items() if tag.text().strip()]
 
-        
+        # 获取iframe播放器 - 优先选择第一个有效的iframe
         iframe_src = ''
         iframes = data('#video-code iframe')
         
@@ -312,5 +314,4 @@ class Spider(Spider):
                 'Referer': self.host
             }
         }
-
 
