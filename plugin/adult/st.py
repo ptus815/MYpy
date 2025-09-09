@@ -12,7 +12,7 @@ sys.path.append('..')
 
 class Spider(Spider):
     def init(self, extend="{}"):
-        self.host = "https://stgay.com"
+        self.host = "https://0d7.xffnqliw.cc/"
         self.headers = {
             'Referer': self.host,
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:144.0) Gecko/20100101 Firefox/144.0'
