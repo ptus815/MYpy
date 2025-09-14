@@ -3,8 +3,8 @@
   "logo": "./logo.gif",
   "sites": [
     {
-      "key": "GayVidsClub",
-      "name": "VC",
+      "key": "GC",
+      "name": "VC|🪜",
       "type": 3,
       "api": "https://raw.githubusercontent.com/ptus815/MYpy/refs/heads/main/plugin/adult/VC.py",
       "searchable": 1,
@@ -22,18 +22,10 @@
     "quickSearch": 1,
     "filterable": 1
     },
-   {
-    "key": "Xhm",
-    "name": "Xhm",
-    "type": 3,
-    "api": "https://raw.githubusercontent.com/ptus815/MYpy/refs/heads/main/plugin/adult/Xhm.py",      
-    "searchable": 1,
-    "quickSearch": 1,
-    "filterable": 1
-    },
+   
   {
-  "key": "stgay",
-  "name": "stgay",
+  "key": "st",
+  "name": "搜同",
   "type": 3,
   "api": "https://raw.githubusercontent.com/ptus815/MYpy/refs/heads/main/plugin/adult/st.py",
   "searchable": 1,
@@ -45,18 +37,8 @@
    }
   },
     {
-      "key": "asiangaylove",
-      "name": "ag",
-      "type": 3,
-      "api": "https://raw.githubusercontent.com/ptus815/MYpy/refs/heads/main/plugin/adult/ag.py",
-      "searchable": 1,
-      "quickSearch": 1,
-      "filterable": 0,
-      "timeout": 60
-    },	
-    {
       "key": "GayXTapes",
-      "name": "XT",
+      "name": "XT|🪜",
       "type": 3,
       "api": "https://raw.githubusercontent.com/ptus815/MYpy/refs/heads/main/plugin/adult/xt.py",
       "searchable": 1,
@@ -417,6 +399,7 @@
   ],
   "ads": []
 }
+
 
 
 
