@@ -22,7 +22,7 @@ class Spider(Spider):
     def manualVideoCheck(self): return False
     def destroy(self): pass
     def homeContent(self, filter):
-        cateManual = [{'type_name': 'OnlyFans', 'type_id': '/category/onlyfans/'}, {'type_name': 'G-Bot', 'type_id': '/category/movies/g-bot/'}, {'type_name': 'trance', 'type_id': '/category/trance-video/'}]
+        cateManual = [{'type_name': 'OnlyFans', 'type_id': '/category/onlyfans/'}, {'type_name': '动漫', 'type_id': '/category/yaoi/'}, {'type_name': 'trance', 'type_id': '/category/trance-video/'},{'type_name': 'west', 'type_id': '/category/western-gay-porn-hd/'},{'type_name': 'non', 'type_id': '/category/nonkeproject/'}]
         return {'class': cateManual, 'filters': {}}
     def _collect_posts(self, doc: pq):
         def normalize(href: str) -> str:
