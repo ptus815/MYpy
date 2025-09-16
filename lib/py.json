@@ -3,10 +3,10 @@
   "logo": "./logo.gif",
   "sites": [
     {
-      "key": "GC",
-      "name": "VC|🪜",
+      "key": "JA",
+      "name": "JAB|免翻",
       "type": 3,
-      "api": "https://raw.githubusercontent.com/ptus815/MYpy/refs/heads/main/plugin/adult/VC.py",
+      "api": "https://raw.githubusercontent.com/ptus815/MYpy/refs/heads/main/plugin/adult/jav.py",
       "searchable": 1,
       "quickSearch": 1,
       "filterable": 0,
@@ -14,7 +14,7 @@
     },
     {
     "key": "推特APPpy",
-    "name": "X",
+    "name": "X|免翻",
     "type": 3,
     "api": "https://raw.githubusercontent.com/ptus815/MYpy/refs/heads/main/plugin/adult/%E6%8E%A8%E7%89%B9APP.py",
     "categories": ["男同"],
@@ -36,16 +36,6 @@
     "ratio": 1.33
    }
   },
-    {
-      "key": "GayXTapes",
-      "name": "XT|🪜",
-      "type": 3,
-      "api": "https://raw.githubusercontent.com/ptus815/MYpy/refs/heads/main/plugin/adult/xt.py",
-      "searchable": 1,
-      "quickSearch": 1,
-      "filterable": 1,
-      "timeout": 60
-    },
     {
     "key": "网盘配置",
     "name": "网盘及彈幕配置",
@@ -399,6 +389,7 @@
   ],
   "ads": []
 }
+
 
 
 
