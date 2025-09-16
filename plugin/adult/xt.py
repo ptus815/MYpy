@@ -32,7 +32,7 @@ class Spider(Spider):
             
         }
 
-        self.host = "https://gay.xtapes.in"
+        self.host = "https://g.xtapes.in"
         self.session = Session()
         self.session.headers.update(self.headers)
         self.session.proxies.update(self.proxies)
@@ -314,4 +314,5 @@ class Spider(Spider):
                 'Referer': self.host
             }
         }
+
 
