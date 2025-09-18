@@ -47,7 +47,7 @@
    }
   },
   {
-  "key": "st",
+  "key": "nt",
   "name": "G头条",
   "type": 3,
   "api": "https://raw.githubusercontent.com/ptus815/MYpy/refs/heads/main/plugin/adult/nt.py",
@@ -412,20 +412,3 @@
   ],
   "ads": []
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
