@@ -46,6 +46,19 @@
     "ratio": 1.33
    }
   },
+      {
+  "key": "st",
+  "name": "G头条",
+  "type": 3,
+  "api": "https://raw.githubusercontent.com/ptus815/MYpy/refs/heads/main/plugin/adult/nt.py",
+  "searchable": 1,
+  "quickSearch": 1,
+  "filterable": 1,
+  "style": {
+    "type": "rect",
+    "ratio": 1.33
+   }
+  },
     {
     "key": "网盘配置",
     "name": "网盘及彈幕配置",
@@ -399,6 +412,7 @@
   ],
   "ads": []
 }
+
 
 
 
