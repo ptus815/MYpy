@@ -2,16 +2,7 @@
   "spider":"./jar/pg.jar;md5;53f3b78536ec7e974a94aa9b4ec2476f",
   "logo": "./logo.gif",
   "sites": [
-    {
-      "key": "JA",
-      "name": "JAB|免翻",
-      "type": 3,
-      "api": "https://raw.githubusercontent.com/ptus815/MYpy/refs/heads/main/plugin/adult/jav.py",
-      "searchable": 1,
-      "quickSearch": 1,
-      "filterable": 0,
-      "timeout": 60
-    },
+    
     {
       "key": "xhm",
       "name": "xhm",
@@ -412,3 +403,4 @@
   ],
   "ads": []
 }
+
